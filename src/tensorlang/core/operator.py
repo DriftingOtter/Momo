@@ -98,6 +98,12 @@ class Operator:
     def arity(self) -> int:
         return len(self.params)
 
+    def abstract(self) -> dict:
+        """Structured, JSON-serializable summary (never executes)."""
+        from .abstract import operator_abstract
+
+        return operator_abstract(self)
+
     def display_params(self) -> list[str]:
         base = self._bound_name or "op"
         return [f"{base}_{p.lower()}" for p in self.params]
@@ -182,7 +188,8 @@ class Operator:
 
     def __bool__(self) -> bool:
         raise TLTypeError(
-            "truth value of an operator is undefined; apply it to data first"
+            "truth value of an operator is undefined; apply it to data first",
+            code="TL0401",
         )
 
     def __getattr__(self, name: str) -> "Operator":
@@ -219,12 +226,15 @@ class Operator:
         if not isinstance(other, Operator):
             raise TLTypeError(
                 f"cannot compose an operator with {type(other).__name__}; "
-                f"both sides of '>>' must be operators"
+                f"both sides of '>>' must be operators",
+                code="TL0417",
             )
         if len(other.params) != 1:
             raise TLTypeError(
                 f"composition requires a unary right-hand operator, got params "
-                f"{list(other.params)}"
+                f"{list(other.params)}",
+                code="TL0417",
+                details={"params": list(other.params)},
             )
         if len(self.params) == 0:
             raise TLTypeError("cannot compose a zero-parameter operator on the left")
@@ -239,7 +249,9 @@ class Operator:
         if len(args) != len(self.params):
             raise TLShapeError(
                 f"operator expects {len(self.params)} argument(s) "
-                f"{list(self.params)}, got {len(args)}"
+                f"{list(self.params)}, got {len(args)}",
+                code="TL0503",
+                details={"expected": list(self.params), "got": len(args)},
             )
         env: dict[tuple[str, str], ir.Expr] = {}
         target: Tensor | None = None
@@ -275,7 +287,8 @@ class Operator:
         raise TLTypeError(
             "only fittable operators support .fit(): build one from "
             "standardize(), minmax(), normalize(), impute() or pca(), "
-            "optionally composed with '>>'"
+            "optionally composed with '>>'",
+            code="TL0416",
         )
 
     def explain(self) -> str:

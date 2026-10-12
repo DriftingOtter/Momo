@@ -229,6 +229,12 @@ class Tensor:
     def version(self) -> int:
         return self._version
 
+    def abstract(self) -> dict:
+        """Structured, JSON-serializable summary (never reads scan data)."""
+        from .abstract import tensor_abstract
+
+        return tensor_abstract(self)
+
     # -- materialization ----------------------------------------------------------
     def collect(self):
         """Materialize this tensor's current contents (a snapshot)."""
@@ -294,7 +300,8 @@ class Tensor:
             return bool(self._data.item())
         raise TLTypeError(
             "truth value of a tensor is ambiguous; apply a reduction or "
-            "collect() an explicit Boolean result first"
+            "collect() an explicit Boolean result first",
+            code="TL0401",
         )
 
     def __len__(self) -> int:
@@ -314,7 +321,8 @@ class Tensor:
     def __iter__(self):
         raise TLTypeError(
             "iteration over a tensor is not implicit; collect() it first "
-            "or index it explicitly"
+            "or index it explicitly",
+            code="TL0402",
         )
 
     def __getitem__(self, index) -> "Lazy":
@@ -382,7 +390,9 @@ class Tensor:
     def T(self) -> "Lazy":
         if self._kind != "dense":
             raise TLUnsupportedError(
-                "transpose is undefined for heterogeneous structured tensors"
+                "transpose is undefined for heterogeneous structured tensors",
+                code="TL0901",
+                details={"operation": "transpose", "kind": self._kind},
             )
         return Lazy(ir.Transpose(self._snapshot_node()))
 
@@ -391,12 +401,20 @@ class Tensor:
 
     def reshape(self, *shape) -> "Lazy":
         if self._kind != "dense":
-            raise TLUnsupportedError("reshape is undefined for structured tensors")
+            raise TLUnsupportedError(
+                "reshape is undefined for structured tensors",
+                code="TL0901",
+                details={"operation": "reshape", "kind": self._kind},
+            )
         return Lazy(ir.Reshape(self._snapshot_node(), _norm_shape(shape)))
 
     def flatten(self) -> "Lazy":
         if self._kind == "frame":
-            raise TLUnsupportedError("flatten is undefined for structured tensors")
+            raise TLUnsupportedError(
+                "flatten is undefined for structured tensors",
+                code="TL0901",
+                details={"operation": "flatten", "kind": self._kind},
+            )
         return Lazy(ir.Flatten(self._snapshot_node()))
 
     def sum(self, by=None) -> "Lazy":
@@ -589,6 +607,12 @@ class Lazy:
         """The (closed) expression graph behind this pending computation."""
         return self._root
 
+    def abstract(self) -> dict:
+        """Structured, JSON-serializable summary (never executes)."""
+        from .abstract import lazy_abstract
+
+        return lazy_abstract(self)
+
     # -- execution ----------------------------------------------------------------------
     def collect(self):
         """Execute the graph and return the materialized result."""
@@ -659,7 +683,8 @@ class Lazy:
     def __bool__(self) -> bool:
         raise TLTypeError(
             "truth value of a pending computation is ambiguous; "
-            "collect() an explicit Boolean result first"
+            "collect() an explicit Boolean result first",
+            code="TL0401",
         )
 
     def __len__(self) -> int:

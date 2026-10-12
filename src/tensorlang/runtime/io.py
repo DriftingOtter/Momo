@@ -29,7 +29,9 @@ def lazy_scan(spec: ScanSpec) -> pl.LazyFrame:
         if spec.format == "csv":
             return pl.scan_csv(list(spec.paths), **spec.kwargs())
     except TypeError as exc:
-        raise TLTypeError(f"unsupported scan option for {spec.describe()}: {exc}")
+        raise TLTypeError(f"unsupported scan option for {spec.describe()}: {exc}",
+                          code="TL0404",
+                          details={"spec": spec.describe()})
     raise TLTypeError(f"unsupported scan format '{spec.format}'")  # pragma: no cover
 
 
@@ -39,7 +41,9 @@ def materialize_scan(spec: ScanSpec) -> pl.DataFrame:
     try:
         return lazy_scan(spec).collect()
     except Exception as exc:
-        raise TLTypeError(f"cannot scan {spec.describe()}: {exc}") from exc
+        raise TLTypeError(f"cannot scan {spec.describe()}: {exc}",
+                          code="TL0404",
+                          details={"spec": spec.describe()}) from exc
 
 
 def scan_schema(spec: ScanSpec) -> dict:
@@ -47,7 +51,9 @@ def scan_schema(spec: ScanSpec) -> dict:
     try:
         return dict(lazy_scan(spec).collect_schema())
     except Exception as exc:
-        raise TLTypeError(f"cannot describe {spec.describe()}: {exc}") from exc
+        raise TLTypeError(f"cannot describe {spec.describe()}: {exc}",
+                          code="TL0404",
+                          details={"spec": spec.describe()}) from exc
 
 
 def write_value(value, kind: str, path: str, format: str) -> str:
@@ -71,5 +77,7 @@ def write_value(value, kind: str, path: str, format: str) -> str:
         else:
             frame.write_csv(path)
     except Exception as exc:
-        raise TLTypeError(f"cannot write {format} to '{path}': {exc}") from exc
+        raise TLTypeError(f"cannot write {format} to '{path}': {exc}",
+                          code="TL0405",
+                          details={"path": path, "format": format}) from exc
     return path

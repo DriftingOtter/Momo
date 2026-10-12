@@ -26,6 +26,7 @@ def parse(translated: str, filename: str) -> ast.Module:
         raise TLSyntaxError(
             f"invalid TensorLang syntax: {exc.msg}",
             loc=f"{filename}:{exc.lineno or '?'}",
+            code="TL0101",
         ) from exc
     _DeclarationChecker(filename).visit(tree)
     return tree
@@ -63,6 +64,7 @@ class _DeclarationChecker(ast.NodeVisitor):
                 raise TLScopeError(
                     "':=' must introduce a plain name in the current scope",
                     loc=f"{self.scopes.filename}:{node.lineno}",
+                    code="TL0202",
                 )
             name = node.targets[0].id
             args = value.args
@@ -70,6 +72,7 @@ class _DeclarationChecker(ast.NodeVisitor):
                 raise TLSyntaxError(  # pragma: no cover - defensive
                     "malformed declaration; do not call __tl_declare__ directly",
                     loc=f"{self.scopes.filename}:{node.lineno}",
+                    code="TL0102",
                 )
             self.scopes.declare(name, node.lineno)
             rhs = args[1]
@@ -92,9 +95,11 @@ class _DeclarationChecker(ast.NodeVisitor):
     def _check_effects(self, name: str, call: ast.Call, lineno: int) -> None:
         cls, reason = _effects.classify(call.args[1])
         if cls != "declarative":
+            code = "TL0302" if cls == "effectful" else "TL0303"
             raise TLDeclarationError(
                 f"':=' cannot bind '{name}' to a {cls} expression: {reason}",
                 loc=f"{self.scopes.filename}:{lineno}",
+                code=code,
             )
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> None:

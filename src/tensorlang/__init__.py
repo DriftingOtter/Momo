@@ -16,6 +16,7 @@ from .core.errors import (
 from .core.operator import Operator, P
 from .core.tensor import Lazy, T, Tensor
 from .frontend.compiler import check_source, run_file, run_source
+from .frontend.diagnose import diagnose_file, diagnose_source
 from .operators.calculus import diff, integrate, simplify
 from .operators.data_science import drop_null, fill_null, is_null, not_null
 from .operators.elementary import cos, exp, log, sin, sqrt, tan
@@ -52,7 +53,7 @@ from .operators.features import onehot, polynomial
 from .operators.relational import join, sort, unique
 from .operators.transform import clip, over, rolling, where
 
-__version__ = "0.4.0"
+__version__ = "0.4.2"
 
 __all__ = [
     "T", "Tensor", "Lazy", "Operator", "P",
@@ -72,6 +73,7 @@ __all__ = [
     "onehot", "polynomial",
     "is_null", "not_null", "fill_null", "drop_null",
     "run_source", "run_file", "check_source",
+    "diagnose_source", "diagnose_file",
     "TensorLangError", "TLSyntaxError", "TLScopeError", "TLDeclarationError",
     "TLTypeError", "TLShapeError", "TLMutationError", "TLSymbolicError",
     "TLDiffError", "TLUnsupportedError",

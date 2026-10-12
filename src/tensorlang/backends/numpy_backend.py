@@ -55,7 +55,9 @@ def apply_binop(op: str, left, right):
     except ValueError:
         raise TLShapeError(
             f"cannot broadcast shapes {a.shape} and {b.shape} "
-            f"for operator '{op}'"
+            f"for operator '{op}'",
+            code="TL0501",
+            details={"shapes": [tuple(a.shape), tuple(b.shape)], "op": op},
         ) from None
     try:
         if op == "add":
@@ -134,7 +136,9 @@ def matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     except ValueError as exc:
         raise TLShapeError(
             f"matmul requires compatible numerical operands, got shapes "
-            f"{a.shape} and {b.shape}"
+            f"{a.shape} and {b.shape}",
+            code="TL0502",
+            details={"shapes": [tuple(a.shape), tuple(b.shape)]},
         ) from exc
 
 

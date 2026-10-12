@@ -1,6 +1,6 @@
 [project]
 name = "tensorlang"
-version = "0.4.0"
+version = "0.4.2"
 description = "TensorLang — a tensor-oriented programming language for numerical computing, structured data, and symbolic mathematics."
 authors = [
     {name = "Daksh Kaul", email = "dakshkaul7790@gmail.com"}

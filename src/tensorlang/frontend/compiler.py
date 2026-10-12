@@ -40,6 +40,7 @@ def __tl_declare__(name: str, value: Any, lineno: int) -> Any:
             f"operator application is a runtime operation, use "
             f"'{name} = ...' instead",
             loc=loc,
+            code="TL0301",
         )
     if isinstance(value, Tensor):
         from ..core.types import PROVENANCE_IO
@@ -50,6 +51,7 @@ def __tl_declare__(name: str, value: Any, lineno: int) -> Any:
                 f"use '{name} = ...' for I/O (or T.scan_* for a lazy, "
                 f"declarative source descriptor)",
                 loc=loc,
+                code="TL0304",
             )
         value._tl_name = name
     elif isinstance(value, Operator):
@@ -63,9 +65,19 @@ def translate(source: str) -> str:
 
 def compile_source(source: str, filename: str = "<tl>") -> Any:
     """Translate, validate and compile ``.tl`` source to a code object."""
+    code, _ = compile_source_tree(source, filename)
+    return code
+
+
+def compile_source_tree(source: str, filename: str = "<tl>"):
+    """Translate and validate, returning ``(code, ast)``.
+
+    Exposed for tooling (REPL display rewriting) that needs the validated
+    tree alongside the executable code.
+    """
     rewritten = _lexer.translate(source)
     tree = _parser.parse(rewritten, filename)
-    return compile(tree, filename, "exec")
+    return compile(tree, filename, "exec"), tree
 
 
 def check_source(source: str, filename: str = "<tl>") -> ast.Module:

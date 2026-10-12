@@ -70,7 +70,9 @@ def _series_op(op: str, left: pl.Series, right) -> pl.Series:
         if isinstance(right, pl.Series):
             if len(left) != len(right):
                 raise TLShapeError(
-                    f"cannot combine series of length {len(left)} and {len(right)}"
+                    f"cannot combine series of length {len(left)} and {len(right)}",
+                    code="TL0504",
+                    details={"lengths": [len(left), len(right)]},
                 )
             return fn(left, right)
         return fn(left, right)
@@ -364,7 +366,9 @@ def getitem(value, index):
         if mask.ndim != 1 or len(mask) != df.height:
             raise TLShapeError(
                 f"Boolean mask of shape {mask.shape} does not match "
-                f"{df.height} structured records"
+                f"{df.height} structured records",
+                code="TL0504",
+                details={"mask": str(tuple(mask.shape)), "rows": df.height},
             )
         return df.filter(pl.Series(mask.tolist()))
     if mask.dtype.kind in ("i", "u"):
@@ -398,7 +402,9 @@ def set_field(df: pl.DataFrame, name: str, values) -> pl.DataFrame:
             series = pl.Series(arr.tolist())
     if len(series) != df.height:
         raise TLShapeError(
-            f"cannot assign {len(series)} values to {df.height} rows"
+            f"cannot assign {len(series)} values to {df.height} rows",
+            code="TL0505",
+            details={"values": len(series), "rows": df.height},
         )
     return df.with_columns(series.alias(name))
 

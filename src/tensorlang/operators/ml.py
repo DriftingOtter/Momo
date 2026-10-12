@@ -106,12 +106,15 @@ def extract_features(value, vkind: str, *, estimator: str,
         if value.dtype == pl.String or value.dtype == pl.Categorical:
             raise TLTypeError(
                 f"{estimator} needs numeric data; encode the "
-                f"'{value.name}' series with onehot() first"
+                f"'{value.name}' series with onehot() first",
+                code="TL0410",
+                details={"field": value.name, "dtype": str(value.dtype)},
             )
         try:
             matrix = np.asarray(value.to_numpy()).astype(np.float64).reshape(-1, 1)
         except (TypeError, ValueError) as exc:
-            raise TLTypeError(f"{estimator} needs numeric data: {exc}") from exc
+            raise TLTypeError(f"{estimator} needs numeric data: {exc}",
+                              code="TL0410") from exc
         return _Features(matrix, [value.name], None, [], True, value.name)
     if vkind == "frame":
         from ..backends import polars_backend as _pl_be
@@ -121,13 +124,18 @@ def extract_features(value, vkind: str, *, estimator: str,
         if not numeric:
             raise TLTypeError(
                 f"{estimator} has no applicable numerical fields in "
-                f"{value.columns}"
+                f"{value.columns}",
+                code="TL0410",
+                details={"columns": list(value.columns)},
             )
         if non_numeric and not allow_mixed:
             raise TLTypeError(
                 f"{estimator} needs an unambiguous numeric feature selection; "
                 f"non-numeric fields {non_numeric} present — select explicitly, "
-                f"e.g. data[{numeric}]"
+                f"e.g. data[{numeric}]",
+                code="TL0410",
+                details={"non_numeric": list(non_numeric),
+                         "numeric": list(numeric)},
             )
         try:
             matrix = value.select(numeric).to_numpy().astype(np.float64)
@@ -143,7 +151,9 @@ def _as_float_matrix(arr: np.ndarray, estimator: str) -> np.ndarray:
         return np.array(out, copy=True) if out is arr else out
     raise TLTypeError(
         f"{estimator} needs numeric data, got dtype {arr.dtype}; encode or "
-        f"select numeric fields explicitly"
+        f"select numeric fields explicitly",
+        code="TL0410",
+        details={"dtype": str(arr.dtype)},
     )
 
 
@@ -154,7 +164,9 @@ def _check_finite(matrix: np.ndarray, estimator: str, *, what: str) -> None:
         problem = "missing values" if bad_nan else "infinite values"
         raise TLTypeError(
             f"{estimator} {what} contains {problem}; handle them explicitly "
-            f"first, e.g. with impute() (fit) or fill_null()"
+            f"first, e.g. with impute() (fit) or fill_null()",
+            code="TL0412",
+            details={"problem": problem},
         )
 
 
@@ -228,7 +240,9 @@ def _fit_impute(cfg: dict, feats: _Features):
                for i, v in enumerate(np.atleast_1d(fills)) if not np.isfinite(v)]
         if bad:
             raise TLTypeError(
-                f"impute('{strategy}') cannot fill all-missing columns {bad}"
+                f"impute('{strategy}') cannot fill all-missing columns {bad}",
+                code="TL0413",
+                details={"columns": list(bad)},
             )
         return (("fill_", _ro(np.atleast_1d(fills).astype(np.float64))),), ()
     if strategy == "most_frequent":
@@ -252,7 +266,9 @@ def _column_modes(matrix: np.ndarray, feats: _Features):
         present = col[~np.isnan(col)]
         if len(present) == 0:
             raise TLTypeError(
-                f"impute('most_frequent') cannot fill all-missing column '{name}'"
+                f"impute('most_frequent') cannot fill all-missing column '{name}'",
+                code="TL0413",
+                details={"columns": [name]},
             )
         vals, counts = np.unique(present, return_counts=True)
         mode = float(vals[int(np.argmax(counts))])
@@ -266,7 +282,9 @@ def _column_modes(matrix: np.ndarray, feats: _Features):
             series = feats.frame[col].drop_nulls()
             if len(series) == 0:
                 raise TLTypeError(
-                    f"impute('most_frequent') cannot fill all-missing column '{col}'"
+                    f"impute('most_frequent') cannot fill all-missing column '{col}'",
+                    code="TL0413",
+                    details={"columns": [col]},
                 )
             top = series.value_counts().sort("count", descending=True)[col][0]
             fills.append((col, top))
@@ -281,10 +299,14 @@ def _fit_pca(cfg: dict, matrix: np.ndarray):
     if k > min(n, d):
         raise TLShapeError(
             f"pca({k}) needs at most min(n_samples, n_features) components, "
-            f"got n_samples={n}, n_features={d}"
+            f"got n_samples={n}, n_features={d}",
+            code="TL0508",
+            details={"n_components": k, "n_samples": n, "n_features": d},
         )
     if n < 2:
-        raise TLShapeError(f"pca needs at least 2 samples, got {n}")
+        raise TLShapeError(f"pca needs at least 2 samples, got {n}",
+                           code="TL0508",
+                           details={"n_samples": n})
     mean = matrix.mean(axis=0)
     centered = matrix - mean
     _, singular, vt = _la.svd(centered, full_matrices=False)
@@ -363,7 +385,9 @@ def _dense_matrix(value: np.ndarray, kind: str, n_features: int):
     if matrix.shape[1] != n_features:
         raise TLShapeError(
             f"operator '{kind}' was fitted on {n_features} features, got "
-            f"{matrix.shape[1]}"
+            f"{matrix.shape[1]}",
+            code="TL0509",
+            details={"n_features": n_features, "got": matrix.shape[1]},
         )
     return matrix, squeeze
 
@@ -388,7 +412,9 @@ def _frame_matrix(state: FittedState, frame: pl.DataFrame) -> tuple[np.ndarray, 
     if missing:
         raise TLTypeError(
             f"operator '{state.kind}' is missing features {missing}; have "
-            f"{frame.columns}"
+            f"{frame.columns}",
+            code="TL0415",
+            details={"missing": list(missing), "available": list(frame.columns)},
         )
     try:
         matrix = frame.select(list(state.numeric_cols)).to_numpy().astype(np.float64)
@@ -650,7 +676,9 @@ def _fit_input(data, estimator: str):
         return evaluate(data.root)
     raise TLTypeError(
         f"{estimator}.fit needs a Tensor or lazy result, got "
-        f"{type(data).__name__}"
+        f"{type(data).__name__}",
+        code="TL0403",
+        details={"got": type(data).__name__},
     )
 
 
@@ -678,7 +706,9 @@ def minmax(lo: float = 0.0, hi: float = 1.0) -> FittableOperator:
     """Min-max scaling into ``[lo, hi]`` (constant columns map to ``lo``)."""
     lo, hi = float(lo), float(hi)
     if not lo < hi:
-        raise TLTypeError(f"minmax needs lo < hi, got ({lo}, {hi})")
+        raise TLTypeError(f"minmax needs lo < hi, got ({lo}, {hi})",
+                          code="TL0411",
+                          details={"lo": lo, "hi": hi})
     return FittableOperator("minmax", {"lo": lo, "hi": hi})
 
 
@@ -686,7 +716,9 @@ def normalize(norm: str = "l2") -> FittableOperator:
     """Row-wise vector normalization (``l1`` | ``l2`` | ``max``)."""
     if norm not in ("l1", "l2", "max"):
         raise TLTypeError(
-            f"unknown norm '{norm}'; use 'l1', 'l2' or 'max'"
+            f"unknown norm '{norm}'; use 'l1', 'l2' or 'max'",
+            code="TL0414",
+            details={"got": norm},
         )
     return FittableOperator("normalize", {"norm": norm})
 
@@ -694,9 +726,12 @@ def normalize(norm: str = "l2") -> FittableOperator:
 def impute(strategy: str = "mean", fill_value=None) -> FittableOperator:
     """Missing-value imputation: mean | median | most_frequent | constant."""
     if strategy not in ("mean", "median", "most_frequent", "constant"):
-        raise TLTypeError(f"unknown impute strategy '{strategy}'")
+        raise TLTypeError(f"unknown impute strategy '{strategy}'",
+                          code="TL0414",
+                          details={"got": strategy})
     if strategy == "constant" and fill_value is None:
-        raise TLTypeError("impute('constant') needs an explicit fill_value")
+        raise TLTypeError("impute('constant') needs an explicit fill_value",
+                          code="TL0411")
     return FittableOperator(
         "impute", {"strategy": strategy, "fill_value": fill_value})
 
@@ -705,9 +740,13 @@ def pca(n_components: int, whiten: bool = False) -> FittableOperator:
     """Principal component analysis via SVD (exact, deterministic)."""
     if isinstance(n_components, bool) or not isinstance(n_components, int):
         raise TLTypeError(
-            f"pca needs an integer component count, got {n_components!r}")
+            f"pca needs an integer component count, got {n_components!r}",
+            code="TL0411",
+            details={"got": repr(n_components)})
     if n_components < 1:
         raise TLTypeError(
-            f"pca needs at least 1 component, got {n_components}")
+            f"pca needs at least 1 component, got {n_components}",
+            code="TL0411",
+            details={"got": n_components})
     return FittableOperator(
         "pca", {"n_components": n_components, "whiten": bool(whiten)})

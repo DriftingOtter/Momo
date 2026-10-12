@@ -41,5 +41,6 @@ class ScopeTable:
                 f"duplicate declaration '{name}': '{name}' is already "
                 f"declared in the same {where}; use '=' to reassign",
                 loc=f"{self.filename}:{lineno}",
+                code="TL0201",
             )
         current.declared.add(name)

@@ -166,6 +166,69 @@ def _describe_operator(op) -> str:
     return f"operator '{name}'" if name else "operator"
 
 
+def _dot_label(node: ir.Expr) -> str:
+    if isinstance(node, ir.Param):
+        return f"Param {node.name}"
+    if isinstance(node, ir.Const):
+        text = repr(node.value)
+        return f"Const {text[:24]}"
+    if isinstance(node, ir.Literal):
+        return f"Literal {node.kind}"
+    if isinstance(node, ir.Scan):
+        return node.spec.describe()
+    if isinstance(node, ir.BinOp):
+        return node.op
+    if isinstance(node, ir.UnOp):
+        return node.op
+    if isinstance(node, ir.FuncCall):
+        return f"{node.func}()"
+    if isinstance(node, ir.FieldAccess):
+        return f".{node.field}"
+    if isinstance(node, ir.Reduce):
+        return node.op
+    if isinstance(node, ir.ApplyOp):
+        return f"apply({_describe_operator(node.operator)})"
+    if isinstance(node, ir.FittedTransform):
+        state = "fitted" if node.state is not None else "unfitted"
+        return f"{node.kind}({state})"
+    return type(node).__name__
+
+
+def to_dot(root: ir.Expr) -> str:
+    """Graphviz DOT rendering of an expression graph (deduped by identity)."""
+    from .planner import _children
+
+    lines = ["digraph {", '  rankdir="BT";']
+    seen: set[int] = set()
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        label = _dot_label(node).replace('"', "'")
+        lines.append(f'  N{id(node)} [label="{label}"];')
+        children: list[ir.Expr] = []
+        if isinstance(node, ir.ApplyOp):
+            children = list(node.args)
+        elif isinstance(node, (ir.DiffVar,)):
+            children = [node.value]
+        elif isinstance(node, (ir.AdjointOf, ir.ForwardOf, ir.SvdPart,
+                               ir.EighPart)):
+            children = []
+        else:
+            try:
+                children = [c for c in _children(node)
+                            if isinstance(c, ir.Expr)]
+            except Exception:  # pragma: no cover - defensive
+                children = []
+        for child in children:
+            lines.append(f"  N{id(node)} -> N{id(child)};")
+            stack.append(child)
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def explain_lazy(root: ir.Expr) -> str:
     """Explain a pending computation: logical graph + physical plan."""
     from . import polars_plan as _lower

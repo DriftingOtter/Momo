@@ -145,11 +145,14 @@ def _series_set(series: pl.Series, key, arr: np.ndarray) -> pl.Series:
         if len(mask) != n:
             raise TLShapeError(
                 f"Boolean mask of length {len(mask)} does not match series "
-                f"of length {n}"
+                f"of length {n}",
+                code="TL0504",
+                details={"mask": len(mask), "length": n},
             )
         items = arr.tolist()
         if len(items) != int(mask.sum()):
-            raise TLShapeError("mask assignment length mismatch")
+            raise TLShapeError("mask assignment length mismatch",
+                               code="TL0505")
         it = iter(items)
         vals = [next(it) if m else v for m, v in zip(mask, vals)]
         return pl.Series(vals, dtype=series.dtype)

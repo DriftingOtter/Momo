@@ -35,9 +35,13 @@ def join(left, right, on=None, how: str = "inner", suffix: str = "_right"):
 
     keys = _norm_on(on) if on is not None else ()
     if how not in JOIN_HOW:
-        raise TLTypeError(f"unknown join type '{how}'; use one of {sorted(JOIN_HOW)}")
+        raise TLTypeError(f"unknown join type '{how}'; use one of {sorted(JOIN_HOW)}",
+                          code="TL0430",
+                          details={"got": how, "valid": sorted(JOIN_HOW)})
     if how != "cross" and not keys:
-        raise TLTypeError(f"join '{how}' needs explicit keys via on=")
+        raise TLTypeError(f"join '{how}' needs explicit keys via on=",
+                          code="TL0430",
+                          details={"how": how})
     if isinstance(left, Operator) or isinstance(right, Operator):
         ops = [x for x in (left, right) if isinstance(x, Operator)]
         names: list[str] = []
@@ -111,7 +115,10 @@ def evaluate_join(left, lkind: str, right, rkind: str,
         if key not in left.columns or key not in right.columns:
             raise TLTypeError(
                 f"join key '{key}' must exist on both sides; have "
-                f"{left.columns} and {right.columns}"
+                f"{left.columns} and {right.columns}",
+                code="TL0431",
+                details={"key": key, "left": list(left.columns),
+                         "right": list(right.columns)},
             )
     try:
         if how == "cross":
@@ -119,7 +126,9 @@ def evaluate_join(left, lkind: str, right, rkind: str,
         else:
             out = left.join(right, on=list(on), how=how, suffix=suffix)
     except Exception as exc:
-        raise TLShapeError(f"join failed: {exc}") from exc
+        raise TLShapeError(f"join failed: {exc}",
+                           code="TL0510",
+                           details={"on": list(on), "how": how}) from exc
     return out, "frame"
 
 

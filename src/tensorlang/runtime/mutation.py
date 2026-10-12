@@ -26,7 +26,8 @@ def apply_inplace(lazy: Lazy) -> Tensor:
         raise TLMutationError(
             "inplace() needs an unambiguous single-input operator applied "
             "to a mutable Tensor, e.g. f(data).inplace(); this computation "
-            "has no single mutable target"
+            "has no single mutable target",
+            code="TL0601",
         )
     if not isinstance(target, Tensor):
         raise TLMutationError(  # pragma: no cover - defensive
@@ -35,7 +36,8 @@ def apply_inplace(lazy: Lazy) -> Tensor:
     if target._kind == "scan":
         raise TLMutationError(
             "cannot inplace() into a lazy scan descriptor: scans are "
-            "immutable sources; collect() into a tensor first"
+            "immutable sources; collect() into a tensor first",
+            code="TL0602",
         )
     # Evaluate first; the target is untouched until the commit below.
     value, kind = evaluate(lazy._root)
@@ -59,7 +61,9 @@ def _commit(target: Tensor, value, kind: str) -> None:
             if not isinstance(value, pl.DataFrame):
                 raise TLMutationError(
                     f"cannot commit a {type(value).__name__} result into a "
-                    f"structured tensor"
+                    f"structured tensor",
+                    code="TL0603",
+                    details={"got": type(value).__name__},
                 )
             payload = value.clone()
         elif kind == "series":
@@ -81,4 +85,5 @@ def _commit(target: Tensor, value, kind: str) -> None:
     except Exception as exc:
         target._kind, target._data, target._version = old_kind, old_data, old_version
         target._provenance = old_prov
-        raise TLMutationError(f"inplace execution failed: {exc}") from exc
+        raise TLMutationError(f"inplace execution failed: {exc}",
+                              code="TL0604") from exc

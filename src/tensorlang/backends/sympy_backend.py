@@ -30,12 +30,14 @@ def to_sympy(node: ir.Expr, symbols: dict[tuple[str, str], sp.Symbol]) -> sp.Exp
         if isinstance(v, float):
             return sp.Float(v)
         raise TLSymbolicError(
-            f"constant {v!r} has no exact symbolic representation"
+            f"constant {v!r} has no exact symbolic representation",
+            code="TL0702",
         )
     if isinstance(node, ir.Literal):
         raise TLSymbolicError(
             "symbolic differentiation needs a pure mathematical expression; "
-            "got embedded tensor data"
+            "got embedded tensor data",
+            code="TL0701",
         )
     if isinstance(node, ir.BinOp):
         left = to_sympy(node.left, symbols)
@@ -48,7 +50,9 @@ def to_sympy(node: ir.Expr, symbols: dict[tuple[str, str], sp.Symbol]) -> sp.Exp
         if node.op not in table:
             raise TLSymbolicError(
                 f"operator '{node.op}' has no symbolic meaning "
-                f"(comparisons and logic are not differentiable)"
+                f"(comparisons and logic are not differentiable)",
+                code="TL0701",
+                details={"operation": node.op},
             )
         return table[node.op](left, right)
     if isinstance(node, ir.UnOp):
@@ -57,7 +61,9 @@ def to_sympy(node: ir.Expr, symbols: dict[tuple[str, str], sp.Symbol]) -> sp.Exp
             return -operand
         if node.op == "abs":
             return sp.Abs(operand)
-        raise TLSymbolicError(f"operator '{node.op}' has no symbolic meaning")
+        raise TLSymbolicError(f"operator '{node.op}' has no symbolic meaning",
+                                code="TL0701",
+                                details={"operation": node.op})
     if isinstance(node, ir.FuncCall):
         args = [to_sympy(a, symbols) for a in node.args]
         table = {
@@ -66,7 +72,9 @@ def to_sympy(node: ir.Expr, symbols: dict[tuple[str, str], sp.Symbol]) -> sp.Exp
         }
         if node.func not in table:
             raise TLSymbolicError(
-                f"function '{node.func}' has no symbolic meaning"
+                f"function '{node.func}' has no symbolic meaning",
+                code="TL0701",
+                details={"operation": node.func},
             )
         return table[node.func](*args)
     if isinstance(node, (ir.GetItem, ir.FieldAccess, ir.Reduce, ir.ApplyOp,
@@ -74,7 +82,9 @@ def to_sympy(node: ir.Expr, symbols: dict[tuple[str, str], sp.Symbol]) -> sp.Exp
                          ir.Stack, ir.FillNull)):
         raise TLSymbolicError(
             f"symbolic mathematics is undefined for '{type(node).__name__}' "
-            f"expressions; differentiate pure mathematical operators only"
+            f"expressions; differentiate pure mathematical operators only",
+            code="TL0701",
+            details={"operation": type(node).__name__},
         )
     raise TLSymbolicError(  # pragma: no cover - defensive
         f"cannot convert '{type(node).__name__}' to a symbolic expression"
@@ -129,7 +139,9 @@ def from_sympy(expr: sp.Basic, param_names: set[str], owner: str) -> ir.Expr:
 def differentiate(root: ir.Expr, owner: str, params: tuple[str, ...]) -> ir.Expr:
     if len(params) != 1:
         raise TLSymbolicError(
-            f"diff requires a single-parameter operator, got params {list(params)}"
+            f"diff requires a single-parameter operator, got params {list(params)}",
+            code="TL0703",
+            details={"params": list(params)},
         )
     symbols: dict[tuple[str, str], sp.Symbol] = {}
     sym = to_sympy(root, symbols)
@@ -159,13 +171,16 @@ def definite_integral(root: ir.Expr, owner: str, params: tuple[str, ...],
     fallback: if SymPy cannot produce an exact result, this raises."""
     if len(params) != 1:
         raise TLSymbolicError(
-            f"integrate requires a single-parameter operator, got {list(params)}"
+            f"integrate requires a single-parameter operator, got {list(params)}",
+            code="TL0703",
+            details={"params": list(params)},
         )
     symbols: dict[tuple[str, str], sp.Symbol] = {}
     sym = to_sympy(root, symbols)
     var = symbols.get((owner, params[0]))
     if var is None:
-        raise TLSymbolicError("cannot integrate an operator independent of its parameter")
+        raise TLSymbolicError("cannot integrate an operator independent of its parameter",
+                              code="TL0703")
     try:
         result = sp.integrate(sym, (var, sp.sympify(lo), sp.sympify(hi)))
     except Exception as exc:
@@ -173,7 +188,8 @@ def definite_integral(root: ir.Expr, owner: str, params: tuple[str, ...],
     if isinstance(result, sp.Integral):
         raise TLSymbolicError(
             f"no exact closed form for the integral of '{sym}'; "
-            f"numerical quadrature is not applied implicitly"
+            f"numerical quadrature is not applied implicitly",
+            code="TL0704",
         )
     return result
 
@@ -182,13 +198,16 @@ def indefinite_integral(root: ir.Expr, owner: str,
                         params: tuple[str, ...]) -> ir.Expr:
     if len(params) != 1:
         raise TLSymbolicError(
-            f"integrate requires a single-parameter operator, got {list(params)}"
+            f"integrate requires a single-parameter operator, got {list(params)}",
+            code="TL0703",
+            details={"params": list(params)},
         )
     symbols: dict[tuple[str, str], sp.Symbol] = {}
     sym = to_sympy(root, symbols)
     var = symbols.get((owner, params[0]))
     if var is None:
-        raise TLSymbolicError("cannot integrate an operator independent of its parameter")
+        raise TLSymbolicError("cannot integrate an operator independent of its parameter",
+                              code="TL0703")
     try:
         result = sp.integrate(sym, var)
     except Exception as exc:
@@ -196,7 +215,8 @@ def indefinite_integral(root: ir.Expr, owner: str,
     if isinstance(result, sp.Integral):
         raise TLSymbolicError(
             f"no exact antiderivative for '{sym}'; "
-            f"numerical quadrature is not applied implicitly"
+            f"numerical quadrature is not applied implicitly",
+            code="TL0704",
         )
     return from_sympy(result, set(params), owner)
 

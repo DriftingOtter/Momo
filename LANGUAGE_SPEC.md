@@ -244,6 +244,14 @@ declaration/effect, type, shape, mutation, symbolic, differentiation
 operation, the representations involved, and the corrective action
 (explicit selection, `.fit` first, `=` vs `:=`).
 
+Every error carries a stable machine-readable code (`TL0000`–`TL9999`,
+rendered `ClassName[CODE]: loc: message`) plus optional structured
+details (available names, expected/got shapes). Codes are catalogued in
+`docs/ERROR_CODES.md` (generated from the registry in `core/errors.py`)
+and are stable API: tools and programmers may rely on them across message
+rewording. Ranges mirror the categories above; `x99` in each range is the
+generic class fallback for sites not yet individually coded.
+
 ## 15. Version history
 
 - **v0.1**: frontend, scoped operators, dense/structured/symbolic core,

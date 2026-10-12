@@ -36,7 +36,8 @@ SUPPORTED = (
 
 
 def _diff_error(node_desc: str, reason: str) -> TLDiffError:
-    return TLDiffError(f"cannot differentiate through {node_desc}: {reason}")
+    return TLDiffError(f"cannot differentiate through {node_desc}: {reason}",
+                       code="TL0806", details={"operation": node_desc})
 
 
 def _f64(value, desc: str) -> np.ndarray:
@@ -83,7 +84,10 @@ def _unbroadcast(cot: np.ndarray, shape: tuple) -> np.ndarray:
         return np.reshape(cot, shape)
     except ValueError as exc:
         raise TLDiffError(f"cotangent shape {cot.shape} incompatible with "
-                          f"target shape {shape}") from exc
+                          f"target shape {shape}",
+                          code="TL0807",
+                          details={"cotangent": str(cot.shape),
+                                   "target": str(shape)}) from exc
 
 
 def _wrap_frame(matrix: np.ndarray, frame: pl.DataFrame) -> pl.DataFrame:
@@ -314,12 +318,18 @@ def _validate_diffvar(node: ir.DiffVar, evaluated) -> None:
         if arr.dtype.kind != "f":
             raise TLDiffError(
                 f"gradient inputs must be floating-point; parameter "
-                f"'{node.name}' has dtype {arr.dtype} — pass float data")
+                f"'{node.name}' has dtype {arr.dtype} — pass float data",
+                code="TL0804",
+                details={"param": node.name, "dtype": str(arr.dtype)},
+            )
     elif kind == "series":
         if value.dtype not in (pl.Float32, pl.Float64):
             raise TLDiffError(
                 f"gradient inputs must be floating-point series; field "
-                f"'{value.name}' has dtype {value.dtype}")
+                f"'{value.name}' has dtype {value.dtype}",
+                code="TL0804",
+                details={"param": node.name, "dtype": str(value.dtype)},
+            )
     elif kind == "frame":
         _check_all_float_frame(value, f"differentiable input '{node.name}'")
     else:
@@ -339,7 +349,10 @@ def _ones_seed(out_value, out_kind):
     raise TLDiffError(
         f"grad needs a scalar-valued operator, got {out_kind} output "
         f"with shape {shape}; use vjp() with an explicit cotangent for "
-        f"non-scalar outputs")
+        f"non-scalar outputs",
+        code="TL0803",
+        details={"kind": out_kind, "shape": str(shape)},
+    )
 
 
 def _check_seed(seed_value, seed_kind: str, out_value, out_kind):
@@ -360,7 +373,10 @@ def _check_seed(seed_value, seed_kind: str, out_value, out_kind):
                 f"shape {tuple(np.shape(out_value))}")
         return arr, "dense"
     if seed_kind != out_kind:
-        raise TLDiffError("vjp cotangent kind does not match output kind")
+        raise TLDiffError("vjp cotangent kind does not match output kind",
+                          code="TL0808",
+                          details={"seed_kind": seed_kind,
+                                   "output_kind": out_kind})
     if out_kind == "series":
         if len(seed_value) != len(out_value):
             raise TLDiffError("vjp cotangent length does not match output")
@@ -1047,7 +1063,10 @@ def _rev_fitted(node: ir.FittedTransform, cot_value, cot_kind: str, val, acc) ->
         raise TLDiffError(
             f"operator '{node.kind}' is not fitted: differentiation through "
             f"fitting is deferred in v0.4 — call .fit(training_data) first; "
-            f"only fitted application differentiates")
+            f"only fitted application differentiates",
+            code="TL0805",
+            details={"estimators": [node.kind]},
+        )
     kind = state.kind
     cfg = dict(state.config)
     if kind == "standardize":
@@ -1396,21 +1415,30 @@ def _resolve_wrt(source: Operator, wrt) -> list[str]:
     if isinstance(source, _GradBase):
         raise TLDiffError(
             "second-order differentiation is not supported in v0.4: grad() "
-            "of a gradient operator is rejected")
+            "of a gradient operator is rejected",
+            code="TL0802",
+        )
     if wrt is None:
         if len(source.params) != 1:
             raise TLDiffError(
                 f"ambiguous differentiation target: operator has params "
-                f"{list(source.params)} — specify wrt= explicitly")
+                f"{list(source.params)} — specify wrt= explicitly",
+                code="TL0801",
+                details={"params": list(source.params)},
+            )
         return [source.params[0]]
     names = [wrt] if isinstance(wrt, str) else list(wrt)
     if not names:
-        raise TLDiffError("wrt= needs at least one parameter name")
+        raise TLDiffError("wrt= needs at least one parameter name",
+                          code="TL0801")
     unknown = [n for n in names if n not in source.params]
     if unknown:
         raise TLDiffError(
             f"unknown differentiation target(s) {unknown}; operator params "
-            f"are {list(source.params)}")
+            f"are {list(source.params)}",
+            code="TL0801",
+            details={"unknown": unknown, "params": list(source.params)},
+        )
     return names
 
 
@@ -1439,7 +1467,10 @@ def _reject_unfitted(source: Operator) -> None:
         raise TLDiffError(
             f"cannot differentiate unfitted estimator(s) {found}: "
             f"differentiation through fitting is deferred in v0.4 — call "
-            f".fit(training_data) first; only fitted application differentiates")
+            f".fit(training_data) first; only fitted application differentiates",
+            code="TL0805",
+            details={"estimators": found},
+        )
 
 
 def grad(loss, wrt=None) -> GradOperator:
@@ -1451,7 +1482,9 @@ def grad(loss, wrt=None) -> GradOperator:
     the gradient executes, since operators are data-independent).
     """
     if not isinstance(loss, Operator):
-        raise TLTypeError(f"grad() needs an operator, got {type(loss).__name__}")
+        raise TLTypeError(f"grad() needs an operator, got {type(loss).__name__}",
+            code="TL0420",
+            details={"got": type(loss).__name__})
     _reject_unfitted(loss)
     return GradOperator(loss, _resolve_wrt(loss, wrt))
 
@@ -1464,7 +1497,9 @@ def value_and_grad(loss, wrt=None):
     """
     if not isinstance(loss, Operator):
         raise TLTypeError(
-            f"value_and_grad() needs an operator, got {type(loss).__name__}")
+            f"value_and_grad() needs an operator, got {type(loss).__name__}",
+            code="TL0420",
+            details={"got": type(loss).__name__})
     _reject_unfitted(loss)
     return ValueGradOperator(loss, _resolve_wrt(loss, wrt))
 
@@ -1473,7 +1508,9 @@ def vjp(loss, wrt=None):
     """Vector-Jacobian product: ``df := vjp(loss, wrt="P")`` applied as
     ``df(x, seed)`` with the cotangent appended after data arguments."""
     if not isinstance(loss, Operator):
-        raise TLTypeError(f"vjp() needs an operator, got {type(loss).__name__}")
+        raise TLTypeError(f"vjp() needs an operator, got {type(loss).__name__}",
+            code="TL0420",
+            details={"got": type(loss).__name__})
     _reject_unfitted(loss)
     return VjpOperator(loss, _resolve_wrt(loss, wrt))
 

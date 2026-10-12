@@ -292,6 +292,36 @@ Numerical library: `svd` (`U, S, Vh = svd(A)`, one shared computation),
 `quantile`, `einsum`, `tensordot`, `moveaxis`, `onehot`, `polynomial`.
 See `examples/ml_pipeline.tl` and `LANGUAGE_SPEC.md` §10–§12.
 
+## Developer tooling (v0.4.1 foundations)
+
+Errors carry stable codes (`error[TL0301]: …`, catalogued in
+`docs/ERROR_CODES.md` and generated from one registry). `tensorlang
+diagnose FILE` re-runs a program with fix suggestions (did-you-mean
+fields, `:=`/`=` confusion, missing imports) in human or JSON form;
+`tensorlang errors [CODE]` browses the catalogue. `Operator.abstract()`,
+`Tensor.abstract()`, and `Lazy.abstract()` return JSON-serializable
+summaries (kind, params, graph size, backends, learned state, schema)
+for debuggers and editor tooling — one introspection API, not three
+formatters.
+
+## Developer tooling
+
+```bash
+tensorlang repl                         # interactive playground (:help inside)
+tensorlang graph FILE [--var V] [--dot] # expression graphs (runs FILE)
+tensorlang explain FILE VAR             # logical + physical plan
+tensorlang profile FILE VAR             # measured costs incl. AD phases
+tensorlang diagnose FILE [--format json]# enriched error analysis
+tensorlang errors [CODE]                # error-code catalogue
+tensorlang doctor                       # environment report
+tensorlang bench [--sizes small]        # benchmark suite
+```
+
+The REPL compiles every line through the real frontend, so `:=`, `{X}`,
+and effect rules hold interactively; expression statements display
+collected values (side effects execute exactly once). `graph`/`explain`/
+`profile` execute the file, then introspect the named binding.
+
 ## Automatic differentiation (v0.4)
 
 Reverse-mode gradients over ordinary operator graphs — no new syntax:

@@ -92,7 +92,9 @@ def _compute_svd(root: ir.Expr, full_matrices: bool):
         )
     arr = np.asarray(value, dtype=np.float64)
     if arr.ndim != 2:
-        raise TLShapeError(f"svd needs a rank-2 matrix, got shape {arr.shape}")
+        raise TLShapeError(f"svd needs a rank-2 matrix, got shape {arr.shape}",
+                           code="TL0507",
+                           details={"shape": tuple(arr.shape)})
     try:
         u, s, vh = _la.svd(arr, full_matrices=full_matrices)
     except Exception as exc:
@@ -132,7 +134,9 @@ def _compute_eigh(root: ir.Expr):
         raise TLTypeError(f"eigh needs dense numerical data, got {kind}")
     arr = np.asarray(value, dtype=np.float64)
     if arr.ndim != 2 or arr.shape[0] != arr.shape[1]:
-        raise TLShapeError(f"eigh needs a square matrix, got shape {arr.shape}")
+        raise TLShapeError(f"eigh needs a square matrix, got shape {arr.shape}",
+                           code="TL0507",
+                           details={"shape": tuple(arr.shape)})
     if not np.allclose(arr, arr.T, rtol=1e-5, atol=1e-8):
         raise TLTypeError(
             "eigh needs a symmetric matrix (only the triangle would be "
@@ -193,17 +197,22 @@ def evaluate_solve(a, b):
     mb = np.asarray(b, dtype=np.float64)
     if ma.ndim != 2 or ma.shape[0] != ma.shape[1]:
         raise TLShapeError(
-            f"solve needs a square coefficient matrix, got shape {ma.shape}"
+            f"solve needs a square coefficient matrix, got shape {ma.shape}",
+            code="TL0506",
+            details={"shape": tuple(ma.shape)},
         )
     if mb.ndim not in (1, 2) or mb.shape[0] != ma.shape[0]:
         raise TLShapeError(
             f"solve: right-hand side shape {mb.shape} does not match "
-            f"matrix shape {ma.shape}"
+            f"matrix shape {ma.shape}",
+            code="TL0506",
+            details={"matrix": tuple(ma.shape), "rhs": tuple(mb.shape)},
         )
     try:
         return _la.solve(ma, mb), "dense"
     except _la.LinAlgError as exc:
-        raise TLShapeError(f"solve: singular system ({exc})") from exc
+        raise TLShapeError(f"solve: singular system ({exc})",
+                           code="TL0506") from exc
 
 
 def norm(x, ord=None, axis=None):
