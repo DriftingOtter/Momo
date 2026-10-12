@@ -34,14 +34,20 @@ def main(argv: list[str] | None = None) -> int:
     graph.add_argument("file", help="path to a .tl source file")
     graph.add_argument("--var", default=None, help="binding to show (default: all)")
     graph.add_argument("--dot", action="store_true", help="Graphviz DOT output")
+    graph.add_argument("--allow-effects", action="store_true",
+                       help="permit I/O or mutation while introspecting")
 
     explain = sub.add_parser("explain", help="print explain() for a binding (runs the file)")
     explain.add_argument("file", help="path to a .tl source file")
     explain.add_argument("var", help="binding to explain")
+    explain.add_argument("--allow-effects", action="store_true",
+                         help="permit I/O or mutation while introspecting")
 
     profile = sub.add_parser("profile", help="print profile() for a binding (runs the file)")
     profile.add_argument("file", help="path to a .tl source file")
     profile.add_argument("var", help="binding to profile")
+    profile.add_argument("--allow-effects", action="store_true",
+                         help="permit I/O or mutation while introspecting")
 
     doctor = sub.add_parser("doctor", help="environment and backend report")
 
@@ -53,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--skip-pipeline", action="store_true")
     bench.add_argument("--skip-memory", action="store_true")
     bench.add_argument("--skip-autodiff", action="store_true")
+    bench.add_argument("--regen-data", action="store_true",
+                       help="regenerate benchmark datasets even when present")
 
     args = parser.parse_args(argv)
     try:
@@ -121,6 +129,27 @@ def _binding(namespace: dict, var: str):
 
 
 def _introspect(args) -> int:
+    from pathlib import Path as _Path
+
+    from .frontend import effects as _effects
+    from .frontend import lexer as _lexer
+
+    import ast as _ast
+
+    try:
+        translated = _lexer.translate(_Path(args.file).read_text(encoding="utf-8"))
+        effects = _effects.find_effects(_ast.parse(translated))
+    except Exception:  # pragma: no cover - unreadable source surfaces below
+        effects = []
+    print(f"note: {args.file} executes to build its graphs; "
+          f"introspection observes the resulting bindings", file=sys.stderr)
+    if effects and not args.allow_effects:
+        shown = ", ".join(f"{name} at line {lineno}"
+                          for name, lineno in effects[:3])
+        print(f"refusing to introspect {args.file}: it may perform I/O or "
+              f"mutation ({shown}). Re-run with --allow-effects to proceed.",
+              file=sys.stderr)
+        return 1
     namespace = _compiler.run_file(args.file)
     if args.command == "graph":
         from .runtime.inspect import format_node, to_dot
@@ -205,7 +234,7 @@ def _bench(args) -> int:
         return 2
     argv = ["run_all.py", "--sizes", *args.sizes]
     for flag in ("skip_dense", "skip_structured", "skip_pipeline",
-                 "skip_memory", "skip_autodiff"):
+                 "skip_memory", "skip_autodiff", "regen_data"):
         if getattr(args, flag):
             argv.append("--" + flag.replace("_", "-"))
     old_argv, _sys.argv = _sys.argv, argv

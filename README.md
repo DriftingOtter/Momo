@@ -320,7 +320,11 @@ tensorlang bench [--sizes small]        # benchmark suite
 The REPL compiles every line through the real frontend, so `:=`, `{X}`,
 and effect rules hold interactively; expression statements display
 collected values (side effects execute exactly once). `graph`/`explain`/
-`profile` execute the file, then introspect the named binding.
+`profile` execute the file, then introspect the named binding. Because
+execution can perform writes, `.inplace()` mutation, or I/O, these three
+commands refuse files with statically detected effectful constructs
+unless passed `--allow-effects` (editor integrations must not mutate by
+accident).
 
 ## Automatic differentiation (v0.4)
 

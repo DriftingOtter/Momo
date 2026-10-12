@@ -28,6 +28,31 @@ EFFECTFUL_ATTRS = frozenset({"write_parquet", "write_csv", "inplace"})
 RUNTIME_ATTRS = frozenset({"collect", "to_numpy", "to_polars", "fit"})
 
 
+def find_effects(tree: ast.AST) -> list[tuple[str, int]]:
+    """Statically locate effectful calls (writes, inplace, T.read).
+
+    Used by introspection tooling (`graph`/`explain`/`profile`) to warn
+    before executing a file whose inspection would otherwise perform I/O
+    or mutation as a side effect. Returns ``(dotted-name, lineno)``.
+    """
+    found: list[tuple[str, int]] = []
+
+    class _Finder(ast.NodeVisitor):
+        def visit_Call(self, node: ast.Call) -> None:
+            func = node.func
+            if isinstance(func, ast.Attribute):
+                if func.attr in EFFECTFUL_ATTRS:
+                    found.append((f".{func.attr}(...)", node.lineno))
+                elif (func.attr == "read"
+                        and isinstance(func.value, ast.Name)
+                        and func.value.id == "T"):
+                    found.append(("T.read(...)", node.lineno))
+            self.generic_visit(node)
+
+    _Finder().visit(tree)
+    return found
+
+
 def classify(tree: ast.AST) -> tuple[str, str]:
     """Classify an expression AST. Returns ``(class, reason)``."""
     checker = _Classifier()

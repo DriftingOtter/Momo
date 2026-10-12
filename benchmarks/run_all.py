@@ -29,7 +29,16 @@ def main() -> int:
     parser.add_argument("--skip-pipeline", action="store_true")
     parser.add_argument("--skip-memory", action="store_true")
     parser.add_argument("--skip-autodiff", action="store_true")
+    parser.add_argument("--regen-data", action="store_true",
+                        help="regenerate datasets even when present")
     args = parser.parse_args()
+
+    if all([args.skip_dense, args.skip_structured, args.skip_pipeline,
+            args.skip_memory, args.skip_autodiff]):
+        print("no workloads selected (everything skipped): leaving datasets "
+              "and existing results untouched.")
+        return 0
+    needs_data = not args.skip_structured or not args.skip_pipeline
 
     specs = machine_specs()
     print(f"machine: {specs['platform']} | cpus={specs['cpus']} | "
@@ -38,7 +47,7 @@ def main() -> int:
     for size in args.sizes:
         rows = bench_structured.SIZES[size]
         data = DATA_DIR / f"sales-{size}.parquet"
-        if not data.exists():
+        if needs_data and (args.regen_data or not data.exists()):
             print(f"generating {data} ({rows} rows)...")
             make_sales(data, rows)
         outdir = DATA_DIR / "out"
