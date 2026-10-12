@@ -1,14 +1,24 @@
 [project]
 name = "tensorlang"
-version = "0.1.0"
-description = ""
+version = "0.4.0"
+description = "TensorLang — a tensor-oriented programming language for numerical computing, structured data, and symbolic mathematics."
 authors = [
-    {name = "Daksh Kaul",email = "dakshkaul7790@gmail.com"}
+    {name = "Daksh Kaul", email = "dakshkaul7790@gmail.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "numpy>=1.26",
+    "polars>=1.0",
+    "sympy>=1.12",
+    "scipy>=1.10",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "scikit-learn>=1.3"]
+
+[project.scripts]
+tensorlang = "tensorlang.cli:main"
 
 [tool.poetry]
 packages = [{include = "tensorlang", from = "src"}]
@@ -16,3 +26,6 @@ packages = [{include = "tensorlang", from = "src"}]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
