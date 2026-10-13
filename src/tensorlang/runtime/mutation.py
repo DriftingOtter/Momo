@@ -33,10 +33,10 @@ def apply_inplace(lazy: Lazy) -> Tensor:
         raise TLMutationError(  # pragma: no cover - defensive
             "inplace() target must be a mutable Tensor"
         )
-    if target._kind == "scan":
+    if target._kind in ("scan", "chunked"):
         raise TLMutationError(
-            "cannot inplace() into a lazy scan descriptor: scans are "
-            "immutable sources; collect() into a tensor first",
+            "cannot inplace() into a lazy scan or chunked source: such "
+            "sources are immutable; collect() into a tensor first",
             code="TL0602",
         )
     # Evaluate first; the target is untouched until the commit below.

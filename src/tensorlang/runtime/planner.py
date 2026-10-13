@@ -92,6 +92,8 @@ def _children(node: ir.Expr) -> list[ir.Expr]:
         return [node.operand]
     if isinstance(node, ir.Scan):
         return []
+    if isinstance(node, ir.Chunked):
+        return []
     if isinstance(node, ir.FittedTransform):
         return [node.arg]
     if isinstance(node, (ir.SvdPart, ir.EighPart)):

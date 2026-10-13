@@ -52,8 +52,13 @@ from .operators.tensor_algebra import einsum, moveaxis, tensordot
 from .operators.features import onehot, polynomial
 from .operators.relational import join, sort, unique
 from .operators.transform import clip, over, rolling, where
+from .runtime.chunk_plan import (
+    clear_chunk_policy,
+    current_policy,
+    set_chunk_policy,
+)
 
-__version__ = "0.4.2"
+__version__ = "0.5.3"
 
 __all__ = [
     "T", "Tensor", "Lazy", "Operator", "P",
@@ -74,6 +79,7 @@ __all__ = [
     "is_null", "not_null", "fill_null", "drop_null",
     "run_source", "run_file", "check_source",
     "diagnose_source", "diagnose_file",
+    "set_chunk_policy", "clear_chunk_policy", "current_policy",
     "TensorLangError", "TLSyntaxError", "TLScopeError", "TLDeclarationError",
     "TLTypeError", "TLShapeError", "TLMutationError", "TLSymbolicError",
     "TLDiffError", "TLUnsupportedError",

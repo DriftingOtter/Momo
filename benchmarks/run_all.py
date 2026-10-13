@@ -17,6 +17,7 @@ import bench_memory  # noqa: E402
 import bench_pipeline  # noqa: E402
 import bench_structured  # noqa: E402
 import bench_autodiff  # noqa: E402
+import bench_chunked  # noqa: E402
 from datasets import DATA_DIR, make_sales  # noqa: E402
 
 
@@ -29,12 +30,13 @@ def main() -> int:
     parser.add_argument("--skip-pipeline", action="store_true")
     parser.add_argument("--skip-memory", action="store_true")
     parser.add_argument("--skip-autodiff", action="store_true")
+    parser.add_argument("--skip-chunked", action="store_true")
     parser.add_argument("--regen-data", action="store_true",
                         help="regenerate datasets even when present")
     args = parser.parse_args()
 
     if all([args.skip_dense, args.skip_structured, args.skip_pipeline,
-            args.skip_memory, args.skip_autodiff]):
+            args.skip_memory, args.skip_autodiff, args.skip_chunked]):
         print("no workloads selected (everything skipped): leaving datasets "
               "and existing results untouched.")
         return 0
@@ -69,9 +71,31 @@ def main() -> int:
         if not args.skip_autodiff:
             print(f"[{size}] autodiff...")
             results["measurements"] += [asdict(m) for m in bench_autodiff.run(size)]
+        if not args.skip_chunked:
+            print(f"[{size}] chunked...")
+            results["measurements"] += [
+                asdict(m) for m in bench_chunked.run(size, str(DATA_DIR))]
 
     results_dir = BENCH_DIR / "results"
     results_dir.mkdir(exist_ok=True)
+    # Merge: skipped workloads keep their previous results instead of being
+    # wiped by a partial run. Only (workload, size) pairs produced by this
+    # run replace previous entries.
+    produced = {(m["workload"], m["size"]) for m in results["measurements"]}
+    merged = []
+    try:
+        previous = json.loads((results_dir / "results.json").read_text())
+        for m in previous.get("measurements", []):
+            if (m["workload"], m["size"]) not in produced:
+                merged.append(m)
+        if merged:
+            print(f"kept {len(merged)} previous measurements for workloads "
+                  f"not run (use --regen-data with a full run to refresh).")
+    except (OSError, ValueError):
+        pass
+    results["measurements"] = merged + results["measurements"]
+    results["workloads_run"] = sorted(
+        {w for w, _ in produced} or ["none"])
     with open(results_dir / "results.json", "w") as fh:
         json.dump(results, fh, indent=2)
     with open(results_dir / "RESULTS.md", "w") as fh:
@@ -83,7 +107,7 @@ def main() -> int:
 def render_markdown(results: dict) -> str:
     specs = results["specs"]
     lines = [
-        "# TensorLang v0.2 benchmark results",
+        "# TensorLang benchmark results",
         "",
         "## Machine",
         "",
@@ -94,6 +118,9 @@ def render_markdown(results: dict) -> str:
         "- Wall-clock: best of 3 after 1 warmup (`time.perf_counter`).",
         "- `peak_python_alloc_mb`: tracemalloc peak around the measured call.",
         "- `peak_rss_mb`: process high-water mark (absolute; never decreases).",
+        "- Cross-version rule: compare `seconds` and `peak_python_alloc_mb`;",
+        "  `peak_rss_mb` ratchets with suite length and is not comparable",
+        "  across runs with different workload counts.",
         "- Correctness: every TensorLang result asserted vs native output.",
         "- `backend`/`materializations`: from `profile()`/`explain()`.",
         "",

@@ -173,6 +173,14 @@ class Scan(Expr):
 
 
 @dataclass(frozen=True)
+class Chunked(Expr):
+    """A reference to persistent chunked storage (path only; metadata
+    loads lazily at planning time, data only at execution boundaries)."""
+
+    path: str
+
+
+@dataclass(frozen=True)
 class WithField(Expr):
     """Named-field assignment as a lazy graph node (``t["net"] = ...``)."""
 
@@ -445,6 +453,8 @@ def iter_params(node: Expr) -> set[tuple[str, str]]:
                 visit(a)
         elif isinstance(n, Scan):
             pass
+        elif isinstance(n, Chunked):
+            pass
         elif isinstance(n, WithField):
             visit(n.obj)
             visit(n.value)
@@ -537,6 +547,8 @@ def remap_params(node: Expr, owner: str) -> Expr:
             return ApplyOp(n.operator, tuple(visit(a) for a in n.args))
         if isinstance(n, Scan):
             return n
+        if isinstance(n, Chunked):
+            return n
         if isinstance(n, WithField):
             return WithField(visit(n.obj), n.name, visit(n.value))
         if isinstance(n, Join):
@@ -620,6 +632,8 @@ def substitute(node: Expr, env: dict[tuple[str, str], Expr]) -> Expr:
         if isinstance(n, ApplyOp):
             return ApplyOp(n.operator, tuple(visit(a) for a in n.args))
         if isinstance(n, Scan):
+            return n
+        if isinstance(n, Chunked):
             return n
         if isinstance(n, WithField):
             return WithField(visit(n.obj), n.name, visit(n.value))

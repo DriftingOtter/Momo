@@ -220,6 +220,13 @@ def _summary(value) -> str:
             return f"Tensor{abstract.get('shape')} {abstract.get('dtype')}"
         if abstract["kind"] == "scan":
             return f"scan{abstract.get('fields')}"
+        if abstract["kind"] == "chunked":
+            shape = abstract.get("shape") or "?"
+            return (f"Tensor(chunked){shape} {abstract.get('dtype')} "
+                    f"[{abstract.get('partitions')} partitions, "
+                    f"unmaterialized]")
+        if abstract["kind"] == "frame":
+            return f"Tensor(frame){abstract.get('fields')}"
         return f"Tensor({abstract['kind']}) {abstract.get('fields')}"
     if isinstance(value, Lazy):
         return "Lazy (pending; .collect() to materialize)"

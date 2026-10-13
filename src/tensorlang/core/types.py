@@ -38,6 +38,51 @@ class ScanSpec:
         return dict(self.options)
 
 
+@dataclass(frozen=True)
+class ChunkSpec:
+    """Logical shape plus physical partitioning of a persistent array.
+
+    Chunking is a physical execution property: operators always see one
+    logical tensor regardless of partition count.
+    """
+
+    path: str
+    shape: tuple[int, ...]
+    dtype: str
+    chunks: tuple[int, ...]
+
+    def describe(self) -> str:
+        return (f"scan_zarr({self.path}, shape={list(self.shape)}, "
+                f"chunks={list(self.chunks)})")
+
+    @property
+    def npartitions(self) -> int:
+        import math
+
+        total = 1
+        for dim, chunk in zip(self.shape, self.chunks):
+            total *= max(math.ceil(dim / chunk), 1)
+        return total
+
+    @property
+    def nbytes(self) -> int:
+        import numpy as _np
+
+        total = 1
+        for dim in self.shape:
+            total *= dim
+        return total * _np.dtype(self.dtype).itemsize
+
+    @property
+    def chunk_nbytes(self) -> int:
+        import numpy as _np
+
+        total = 1
+        for chunk in self.chunks:
+            total *= chunk
+        return total * _np.dtype(self.dtype).itemsize
+
+
 JOIN_HOW = frozenset({
     "inner", "left", "right", "full", "outer", "cross", "semi", "anti",
 })

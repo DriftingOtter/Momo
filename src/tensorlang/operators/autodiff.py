@@ -268,8 +268,15 @@ class _GradShared:
 
     def forward(self):
         if self.output is None:
+            from ..runtime import chunk_plan as _chunk
             from ..runtime.executor import trace_evaluate
 
+            if _chunk.contains_chunked(self.root):
+                raise TLDiffError(
+                    "differentiation over chunked data is deferred in v0.5 "
+                    "M1; collect() explicitly to materialize first",
+                    code="TL0809",
+                )
             t0 = time.perf_counter()
             result, cache = trace_evaluate(self.root)
             self.values = {key: entry[1] for key, entry in cache.items()}

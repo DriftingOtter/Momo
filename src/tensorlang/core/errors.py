@@ -97,8 +97,8 @@ class TLUnsupportedError(TensorLangError):
 # table (see frontend.diagnose.render_catalogue); tests enforce that used
 # codes are registered and the docs are fresh. Ranges: TL01 syntax,
 # TL02 scope, TL03 declaration/effects, TL04 types, TL05 shapes, TL06
-# mutation, TL07 symbolic, TL08 autodiff, TL09 unsupported; x99 in each
-# range is the generic class fallback.
+# mutation, TL07 symbolic, TL08 autodiff, TL09 unsupported, TL10
+# chunked/out-of-core; x99 in each range is the generic class fallback.
 
 def _reg(code: str, category: str, title: str, hint: str) -> str:
     ERROR_REGISTRY[code] = {"category": category, "title": title, "hint": hint}
@@ -209,3 +209,73 @@ _reg("TL0808", "TLDiffError", "vjp cotangent mismatch",
      "The seed must match the output shape and kind exactly.")
 _reg("TL0901", "TLUnsupportedError", "undefined for representation",
      "The operation has no meaning for this representation; select/convert explicitly.")
+_reg("TL0809", "TLDiffError", "differentiation over chunked data deferred",
+     "Out-of-core differentiation is deferred; collect() explicitly to materialize first.")
+_reg("TL1001", "TLUnsupportedError", "unsupported chunked operation",
+     "Not chunk-lowerable in v0.5; restructure with elementwise/shape/reduction ops.")
+_reg("TL1002", "TLTypeError", "chunked write target exists",
+     "Pass overwrite=True to replace an existing store, or choose a fresh path.")
+_reg("TL1003", "TLTypeError", "chunked source unreadable",
+     "Check the store path, format, and permissions.")
+_reg("TL1010", "TLUnsupportedError", "incompatible chunk layouts",
+     "Layouts cannot align safely (unknown dimensions, unmergeable reshapes, "
+     "partitioned contraction axes); rechunk the store or restructure.")
+_reg("TL1011", "TLUnsupportedError", "unsafe rechunking",
+     "The plan exceeds conservative block-byte limits; use smaller chunks "
+     "or fewer partitions.")
+_reg("TL1012", "TLUnsupportedError", "excessive graph expansion",
+     "The plan exceeds the task-count limit; simplify or coarsen chunks.")
+_reg("TL1013", "TLUnsupportedError", "unsupported global operation",
+     "Sorting, joins, grouping, and overlap exchange need global data "
+     "movement; restructure outside chunked graphs.")
+_reg("TL1020", "TLUnsupportedError", "memory-budget admission failure",
+     "The modeled working set exceeds the configured budget; raise the "
+     "budget (see the suggested value) or use smaller chunks.")
+_reg("TL1021", "TLUnsupportedError", "unbounded resource estimate",
+     "Resource needs cannot be bounded reliably; unknown requirements "
+     "are never treated as zero.")
+_reg("TL1022", "TLUnsupportedError", "execution-time resource pressure",
+     "Observed memory growth far exceeds budget and model; "
+     "already-running native operations can overshoot modeled limits.")
+_reg("TL1023", "TLUnsupportedError", "incompatible chunk/concurrency",
+     "A single task's working set exceeds the budget, so reducing "
+     "concurrency cannot help; rechunk the store to smaller chunks.")
+_reg("TL1024", "TLUnsupportedError", "materialization exceeds budget",
+     "collect() would materialize more than the budget allows; stream "
+     "with write_zarr() instead.")
+_reg("TL1030", "TLUnsupportedError", "persistent source changed",
+     "A zarr source changed after planning; the admitted plan no longer "
+     "describes it. Detection is metadata-only and best-effort.")
+_reg("TL1031", "TLUnsupportedError", "staging or commit failure",
+     "Execution or publication failed; no partial output was published. "
+     "See details for stage and backend error.")
+_reg("TL1032", "TLUnsupportedError", "interrupted execution",
+     "The run was cancelled; no new work is scheduled. Running native "
+     "tasks may have completed; staging is cleaned after workers stop.")
+_reg("TL1033", "TLUnsupportedError", "stale staging artifacts",
+     "A previous interrupted run left staging behind; use "
+     "recover_stale_staging() to inspect or remove it.")
+_reg("TL1034", "TLUnsupportedError", "output validation failure",
+     "Chunk census or metadata mismatch before publication; the "
+     "destination was left untouched.")
+_reg("TL1035", "TLUnsupportedError", "resource cleanup failure",
+     "Staging removal failed; the report names the remaining path and a "
+     "manual recovery instruction.")
+_reg("TL0199", "TLSyntaxError", "unspecified syntax error",
+     "Generic syntax failure; see the message.")
+_reg("TL0299", "TLScopeError", "unspecified scope error",
+     "Generic scope failure; see the message.")
+_reg("TL0399", "TLDeclarationError", "unspecified declaration error",
+     "Generic declaration failure; see the message.")
+_reg("TL0499", "TLTypeError", "unspecified type error",
+     "Generic type failure; see the message.")
+_reg("TL0599", "TLShapeError", "unspecified shape error",
+     "Generic shape failure; see the message.")
+_reg("TL0699", "TLMutationError", "unspecified mutation error",
+     "Generic mutation failure; see the message.")
+_reg("TL0799", "TLSymbolicError", "unspecified symbolic error",
+     "Generic symbolic failure; see the message.")
+_reg("TL0899", "TLDiffError", "unspecified differentiation error",
+     "Generic differentiation failure; see the message.")
+_reg("TL0999", "TLUnsupportedError", "unsupported operation",
+     "Generic unsupported-operation failure; see the message.")

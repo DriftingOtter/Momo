@@ -41,7 +41,7 @@ def test_explain_and_profile(capsys):
 def test_doctor(capsys):
     assert cli_main(["doctor"]) == 0
     out = capsys.readouterr().out
-    for token in ("tensorlang", "python", "numpy", "polars"):
+    for token in ("tensorlang", "python", "numpy", "polars", "dask", "zarr"):
         assert token in out
 
 
@@ -70,5 +70,6 @@ def test_introspect_effect_gate(tmp_path, capsys):
 def test_bench_all_skipped_touches_nothing(capsys):
     assert cli_main(["bench", "--sizes", "small",
                      "--skip-dense", "--skip-structured", "--skip-pipeline",
-                     "--skip-memory", "--skip-autodiff"]) == 0
+                     "--skip-memory", "--skip-autodiff",
+                     "--skip-chunked"]) == 0
     assert "no workloads selected" in capsys.readouterr().out

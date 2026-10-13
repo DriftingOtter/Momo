@@ -4,19 +4,23 @@ Stable, machine-readable codes attached to every `TensorLangError`
 (`ClassName[CODE]: loc: message`). Tools and programmers can rely on
 codes across message rewording. Ranges: `TL01` syntax, `TL02` scope,
 `TL03` declaration/effects, `TL04` types, `TL05` shapes, `TL06`
-mutation, `TL07` symbolic, `TL08` autodiff, `TL09` unsupported;
-`x99` in each range is the generic class fallback.
+mutation, `TL07` symbolic, `TL08` autodiff, `TL09` unsupported,
+`TL10` chunked/out-of-core (M1 planning, M2 layout, M3 budgets,
+M4 reliability); `x99` in each range is the generic class fallback.
 
 | code | category | title | guidance |
 |---|---|---|---|
 | `TL0101` | TLSyntaxError | invalid syntax | Check the reported line for TensorLang/Python syntax mistakes. |
 | `TL0102` | TLSyntaxError | malformed declaration | Do not call __tl_declare__ directly; write NAME := expr. |
+| `TL0199` | TLSyntaxError | unspecified syntax error | Generic syntax failure; see the message. |
 | `TL0201` | TLScopeError | duplicate declaration | A name may be declared once per scope; use = to reassign. |
 | `TL0202` | TLScopeError | declaration needs a plain name | := must introduce a plain name in the current scope. |
+| `TL0299` | TLScopeError | unspecified scope error | Generic scope failure; see the message. |
 | `TL0301` | TLDeclarationError | runtime application under := | Operator application executes; bind its result with = instead. |
 | `TL0302` | TLDeclarationError | effectful expression under := | Reads, writes, and inplace() are effectful; use = (or T.scan_* for a lazy descriptor). |
 | `TL0303` | TLDeclarationError | runtime expression under := | collect()/fit()/conversions execute; bind their result with =. |
 | `TL0304` | TLDeclarationError | effectful tensor under := | Tensors from T.read() carry I/O provenance; use = to bind them. |
+| `TL0399` | TLDeclarationError | unspecified declaration error | Generic declaration failure; see the message. |
 | `TL0401` | TLTypeError | ambiguous truth value | Tensors have no truth value; collect() an explicit Boolean or reduce first. |
 | `TL0402` | TLTypeError | cannot iterate a tensor | Iteration is never implicit; collect() or index explicitly first. |
 | `TL0403` | TLTypeError | fit needs tensor data | Pass a Tensor or lazy result to .fit(), not scalars or operators. |
@@ -33,6 +37,7 @@ mutation, `TL07` symbolic, `TL08` autodiff, `TL09` unsupported;
 | `TL0420` | TLTypeError | gradient constructor needs an operator | Pass an Operator to grad()/value_and_grad()/vjp(), not data. |
 | `TL0430` | TLTypeError | invalid join configuration | Use a documented join type; non-cross joins need explicit on= keys. |
 | `TL0431` | TLTypeError | join key or shape problem | Keys must exist on both sides with compatible lengths. |
+| `TL0499` | TLTypeError | unspecified type error | Generic type failure; see the message. |
 | `TL0501` | TLShapeError | incompatible broadcast shapes | Align shapes explicitly; broadcasting follows NumPy rules. |
 | `TL0502` | TLShapeError | incompatible matrix multiplication | matmul needs (…, n, k) @ (…, k, m) numerical operands. |
 | `TL0503` | TLShapeError | operator arity mismatch | Apply with exactly one argument per parameter, positionally. |
@@ -43,14 +48,17 @@ mutation, `TL07` symbolic, `TL08` autodiff, `TL09` unsupported;
 | `TL0508` | TLShapeError | invalid PCA request | Need n_components <= min(n_samples, n_features) and >= 2 samples. |
 | `TL0509` | TLShapeError | feature width mismatch on apply | Application data must have the fitted feature count (frames align by name). |
 | `TL0510` | TLShapeError | join execution failed | Check key dtypes and join compatibility. |
+| `TL0599` | TLShapeError | unspecified shape error | Generic shape failure; see the message. |
 | `TL0601` | TLMutationError | inplace without a mutable target | Use f(tensor).inplace() with a single-input operator over a Tensor. |
 | `TL0602` | TLMutationError | inplace into a lazy scan | Scans are immutable descriptors; collect() into a tensor first. |
 | `TL0603` | TLMutationError | inplace result incompatible | The computed result cannot replace the target's contents. |
 | `TL0604` | TLMutationError | inplace execution failed | The input was left unchanged; inspect the cause. |
+| `TL0699` | TLMutationError | unspecified mutation error | Generic mutation failure; see the message. |
 | `TL0701` | TLSymbolicError | non-symbolic expression | Differentiate/integrate pure mathematical operators only. |
 | `TL0702` | TLSymbolicError | constant without exact form | The constant has no exact symbolic representation. |
 | `TL0703` | TLSymbolicError | symbolic arity mismatch | diff()/integrate() need single-parameter operators. |
 | `TL0704` | TLSymbolicError | no exact closed form | No exact integral exists; numerical quadrature is never silent. |
+| `TL0799` | TLSymbolicError | unspecified symbolic error | Generic symbolic failure; see the message. |
 | `TL0801` | TLDiffError | invalid differentiation target | Specify wrt= with an existing parameter name (default: the sole parameter). |
 | `TL0802` | TLDiffError | second-order differentiation | Higher-order derivatives are deferred; grad() of a gradient operator is rejected. |
 | `TL0803` | TLDiffError | non-scalar gradient target | grad() needs scalar-valued operators; use vjp() with a cotangent otherwise. |
@@ -59,4 +67,25 @@ mutation, `TL07` symbolic, `TL08` autodiff, `TL09` unsupported;
 | `TL0806` | TLDiffError | nondifferentiable operation | See LANGUAGE_SPEC.md for the supported rule set; restructure the graph. |
 | `TL0807` | TLDiffError | gradient shape mismatch | Cotangent shapes must be consistent through the graph. |
 | `TL0808` | TLDiffError | vjp cotangent mismatch | The seed must match the output shape and kind exactly. |
+| `TL0809` | TLDiffError | differentiation over chunked data deferred | Out-of-core differentiation is deferred; collect() explicitly to materialize first. |
+| `TL0899` | TLDiffError | unspecified differentiation error | Generic differentiation failure; see the message. |
 | `TL0901` | TLUnsupportedError | undefined for representation | The operation has no meaning for this representation; select/convert explicitly. |
+| `TL0999` | TLUnsupportedError | unsupported operation | Generic unsupported-operation failure; see the message. |
+| `TL1001` | TLUnsupportedError | unsupported chunked operation | Not chunk-lowerable in v0.5; restructure with elementwise/shape/reduction ops. |
+| `TL1002` | TLTypeError | chunked write target exists | Pass overwrite=True to replace an existing store, or choose a fresh path. |
+| `TL1003` | TLTypeError | chunked source unreadable | Check the store path, format, and permissions. |
+| `TL1010` | TLUnsupportedError | incompatible chunk layouts | Layouts cannot align safely (unknown dimensions, unmergeable reshapes, partitioned contraction axes); rechunk the store or restructure. |
+| `TL1011` | TLUnsupportedError | unsafe rechunking | The plan exceeds conservative block-byte limits; use smaller chunks or fewer partitions. |
+| `TL1012` | TLUnsupportedError | excessive graph expansion | The plan exceeds the task-count limit; simplify or coarsen chunks. |
+| `TL1013` | TLUnsupportedError | unsupported global operation | Sorting, joins, grouping, and overlap exchange need global data movement; restructure outside chunked graphs. |
+| `TL1020` | TLUnsupportedError | memory-budget admission failure | The modeled working set exceeds the configured budget; raise the budget (see the suggested value) or use smaller chunks. |
+| `TL1021` | TLUnsupportedError | unbounded resource estimate | Resource needs cannot be bounded reliably; unknown requirements are never treated as zero. |
+| `TL1022` | TLUnsupportedError | execution-time resource pressure | Observed memory growth far exceeds budget and model; already-running native operations can overshoot modeled limits. |
+| `TL1023` | TLUnsupportedError | incompatible chunk/concurrency | A single task's working set exceeds the budget, so reducing concurrency cannot help; rechunk the store to smaller chunks. |
+| `TL1024` | TLUnsupportedError | materialization exceeds budget | collect() would materialize more than the budget allows; stream with write_zarr() instead. |
+| `TL1030` | TLUnsupportedError | persistent source changed | A zarr source changed after planning; the admitted plan no longer describes it. Detection is metadata-only and best-effort. |
+| `TL1031` | TLUnsupportedError | staging or commit failure | Execution or publication failed; no partial output was published. See details for stage and backend error. |
+| `TL1032` | TLUnsupportedError | interrupted execution | The run was cancelled; no new work is scheduled. Running native tasks may have completed; staging is cleaned after workers stop. |
+| `TL1033` | TLUnsupportedError | stale staging artifacts | A previous interrupted run left staging behind; use recover_stale_staging() to inspect or remove it. |
+| `TL1034` | TLUnsupportedError | output validation failure | Chunk census or metadata mismatch before publication; the destination was left untouched. |
+| `TL1035` | TLUnsupportedError | resource cleanup failure | Staging removal failed; the report names the remaining path and a manual recovery instruction. |

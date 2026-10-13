@@ -87,6 +87,24 @@ def tensor_abstract(t) -> dict:
             out["fields"] = list(schema)
         except Exception as exc:  # pragma: no cover - unreadable source
             out["schema_error"] = str(exc)
+    elif t._kind == "chunked":
+        out["shape"] = None
+        out["note"] = "lazy persistent array: metadata only, data untouched"
+        try:
+            from ..backends import dask_backend as _be
+
+            spec = _be.describe(t._data)
+            out["shape"] = list(spec.shape)
+            out["dtype"] = spec.dtype
+            out["storage"] = "zarr"
+            out["source"] = spec.path
+            out["chunks"] = list(spec.chunks)
+            out["partitions"] = spec.npartitions
+            out["nbytes"] = spec.nbytes
+            out["chunk_nbytes"] = spec.chunk_nbytes
+            out["materialized"] = False
+        except Exception as exc:
+            out["metadata_error"] = str(exc)
     return out
 
 
@@ -96,6 +114,12 @@ def lazy_abstract(lz) -> dict:
 
     graph = plan(lz._root)
     target = lz._target
+    try:
+        from ..runtime.chunk_plan import current_policy
+
+        memory_policy = current_policy()
+    except Exception:  # pragma: no cover - defensive
+        memory_policy = {"memory_budget_bytes": None, "max_workers": None}
     return {
         "nodes": graph.node_count,
         "backends": graph.summary(),
@@ -104,4 +128,5 @@ def lazy_abstract(lz) -> dict:
             "name": target._tl_name,
         } if target is not None else None),
         "cached": lz._has_cached,
+        "memory_policy": memory_policy,
     }

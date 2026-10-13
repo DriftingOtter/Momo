@@ -191,6 +191,20 @@ def _evaluate(node: ir.Expr) -> tuple[Any, str]:
         from . import io as _io
 
         return _io.materialize_scan(node.spec), "frame"
+    if isinstance(node, ir.Chunked):
+        # Never silently materialize persistent storage inside a larger
+        # graph: chunked roots execute via chunk_plan (dask) from explicit
+        # boundaries (collect/write/profile), or not at all.
+        from ..core.errors import TLUnsupportedError
+
+        raise TLUnsupportedError(
+            "chunked data reached node-by-node evaluation, which would "
+            "materialize persistent storage; only chunk-lowerable pipelines "
+            "(elementwise/shape/reduction ops) execute out-of-core in v0.5 "
+            "M1 — collect() explicitly to materialize, or restructure",
+            code="TL1001",
+            details={"path": node.path},
+        )
     if isinstance(node, ir.FittedTransform):
         from ..operators import ml as _ml
 

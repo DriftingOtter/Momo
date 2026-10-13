@@ -15,6 +15,9 @@ from ..core.types import ScanSpec
 # Counts effectful scan executions (drives profile() honestly).
 SCAN_EXECUTIONS = 0
 
+# Counts chunked executions (dask collects/sinks over persistent stores).
+CHUNK_EXECUTIONS = 0
+
 
 def _bump() -> None:
     global SCAN_EXECUTIONS

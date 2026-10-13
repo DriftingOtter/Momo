@@ -29,6 +29,8 @@ def format_node(node: ir.Expr, indent: int = 0) -> str:
         return f"{pad}Literal({node.kind})"
     if isinstance(node, ir.Scan):
         return f"{pad}{node.spec.describe()}"
+    if isinstance(node, ir.Chunked):
+        return f"{pad}scan_zarr({node.path})"
     if isinstance(node, ir.BinOp):
         return (f"{pad}{node.op}\n{format_node(node.left, indent + 1)}\n"
                 f"{format_node(node.right, indent + 1)}")
@@ -176,6 +178,8 @@ def _dot_label(node: ir.Expr) -> str:
         return f"Literal {node.kind}"
     if isinstance(node, ir.Scan):
         return node.spec.describe()
+    if isinstance(node, ir.Chunked):
+        return f"scan_zarr({node.path})"
     if isinstance(node, ir.BinOp):
         return node.op
     if isinstance(node, ir.UnOp):
@@ -234,6 +238,18 @@ def explain_lazy(root: ir.Expr) -> str:
     from . import polars_plan as _lower
 
     logical = format_node(root)
+    try:
+        from . import chunk_plan as _chunk
+
+        if _chunk.contains_chunked(root):
+            physical, _ = _chunk.explain_chunked(root)
+            graph = _plan_graph(root)
+            return "\n".join([
+                "logical plan (TensorLang IR):", logical, "", physical, "",
+                f"graph: {graph.node_count} nodes; backends {graph.summary()}",
+            ])
+    except ImportError:  # pragma: no cover - defensive
+        pass
     physical, _ = _lower.explain_plan(root)
     graph = _plan_graph(root)
     lines = [
@@ -249,7 +265,8 @@ def explain_lazy(root: ir.Expr) -> str:
 
 @dataclass
 class ProfileResult:
-    """Measured execution costs. Every field is observed, never estimated."""
+    """Measured execution costs. Every field is observed, never estimated,
+    except the explicitly prefixed ``estimated_*`` copies of the plan."""
 
     elapsed_ms: float
     backend: str  # 'polars-lazy' | 'materialized'
@@ -265,6 +282,15 @@ class ProfileResult:
     plan: str = ""
     forward_ms: float | None = None  # AD forward phase (gradient graphs)
     backward_ms: float | None = None  # AD reverse phase (gradient graphs)
+    chunk_executions: int = 0  # dask collects/sinks over persistent stores
+    baseline_rss_mb: float | None = None  # chunked: high-water before run
+    peak_rss_mb: float | None = None  # chunked: high-water after run
+    estimated_peak_mb: float | None = None  # chunked: modeled working set
+    budget_mb: float | None = None  # chunked: configured budget (None = off)
+    workers_used: int | None = None  # chunked: capped worker count
+    task_count: int | None = None  # chunked: executed dask tasks
+    pressure_observed: bool = False  # observed delta far above budget+model
+    pressure_code: str | None = None  # "TL1022" when pressure_observed
 
     def __str__(self) -> str:
         shape = self.shape if self.shape is not None else f"{self.rows}x{self.cols}"
@@ -275,6 +301,23 @@ class ProfileResult:
             f"peak_rss_delta={self.peak_rss_delta_mb:.2f}MB "
             f"nodes={self.nodes} scan_executions={self.scan_executions}"
         )
+        if self.chunk_executions:
+            text += f" chunk_executions={self.chunk_executions}"
+        if self.baseline_rss_mb is not None and self.peak_rss_mb is not None:
+            text += (f" baseline_rss={self.baseline_rss_mb:.1f}MB "
+                     f"peak_rss={self.peak_rss_mb:.1f}MB")
+        if self.estimated_peak_mb is not None or self.budget_mb is not None:
+            est = f"{self.estimated_peak_mb:.2f}MB" if (
+                self.estimated_peak_mb is not None) else "n/a"
+            bud = f"{self.budget_mb:.2f}MB" if (
+                self.budget_mb is not None) else "unenforced"
+            text += f" estimated_peak={est} budget={bud}"
+        if self.workers_used is not None:
+            text += f" workers={self.workers_used}"
+        if self.task_count is not None:
+            text += f" tasks={self.task_count}"
+        if self.pressure_observed:
+            text += f" pressure={self.pressure_code or 'TL1022'}"
         if self.forward_ms is not None and self.backward_ms is not None:
             text += (f" forward={self.forward_ms:.2f}ms "
                      f"backward={self.backward_ms:.2f}ms")
@@ -302,16 +345,28 @@ def profile_lazy(root: ir.Expr):
 
     graph = _plan_graph(root)
     scans_before = _io.SCAN_EXECUTIONS
+    chunks_before = _io.CHUNK_EXECUTIONS
     rss_before = _rss_mb()
     tracemalloc.start()
     start = time.perf_counter()
+    decision: dict = {}
+    observed: dict = {}
     try:
-        try:
-            value, kind, plan_text = _lower.collect_lowered(root)
-            backend, lowered = "polars-lazy", True
-        except Exception:
-            value, kind = evaluate(root)
-            plan_text, backend, lowered = "", "materialized", False
+        chunked = _is_chunked(root)
+        if chunked:
+            from . import chunk_plan as _chunk
+
+            value, kind, plan_text = _chunk.collect_or_raise(root)
+            backend, lowered = "dask-chunked", True
+            decision = dict(_chunk.LAST_DECISION)
+            observed = dict(_chunk.LAST_OBSERVED)
+        else:
+            try:
+                value, kind, plan_text = _lower.collect_lowered(root)
+                backend, lowered = "polars-lazy", True
+            except Exception:
+                value, kind = evaluate(root)
+                plan_text, backend, lowered = "", "materialized", False
         result = collect_value(value, kind)
     finally:
         elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -320,6 +375,22 @@ def profile_lazy(root: ir.Expr):
     rss_after = _rss_mb()
     rows, cols, shape = _result_shape(result, kind)
     forward_ms, backward_ms = _ad_phases(root)
+    baseline = observed.get("baseline_rss_mb")
+    peak = observed.get("peak_rss_mb")
+    est_mb = observed.get("estimated_peak_mb")
+    budget_mb = observed.get("budget_mb")
+    pressure, pressure_code = False, None
+    if chunked and budget_mb is not None and est_mb is not None:
+        try:
+            from .chunk_plan import PRESSURE_FLOOR_BYTES as _floor
+
+            delta_bytes = max(observed.get("delta_mb") or 0.0, 0.0) * 1e6
+            if (delta_bytes > budget_mb * 1e6
+                    and delta_bytes > _floor
+                    and delta_bytes > 2 * max(est_mb * 1e6, 0.0)):
+                pressure, pressure_code = True, "TL1022"
+        except Exception:  # pragma: no cover - defensive
+            pressure, pressure_code = False, None
     return ProfileResult(
         elapsed_ms=elapsed_ms,
         backend=backend,
@@ -333,8 +404,17 @@ def profile_lazy(root: ir.Expr):
         nodes=graph.node_count,
         scan_executions=_io.SCAN_EXECUTIONS - scans_before,
         plan=plan_text,
+        chunk_executions=_io.CHUNK_EXECUTIONS - chunks_before,
         forward_ms=forward_ms,
         backward_ms=backward_ms,
+        baseline_rss_mb=baseline,
+        peak_rss_mb=peak,
+        estimated_peak_mb=est_mb,
+        budget_mb=budget_mb,
+        workers_used=observed.get("workers_used"),
+        task_count=(decision.get("tasks") if decision else None),
+        pressure_observed=pressure,
+        pressure_code=pressure_code,
     )
 
 
@@ -347,9 +427,19 @@ def _ad_phases(root):
     return None, None
 
 
+def _is_chunked(root) -> bool:
+    from . import chunk_plan as _chunk
+
+    try:
+        return _chunk.contains_chunked(root)
+    except ImportError:  # pragma: no cover - defensive
+        return False
+
+
 def _result_shape(result, kind: str):
     if kind == "dense":
-        return None, None, tuple(result.shape)
+        shape = tuple(result.shape) if hasattr(result, "shape") else ()
+        return None, None, shape
     if kind == "frame":
         return result.height, result.width, None
     if kind == "series":

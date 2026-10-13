@@ -22,7 +22,8 @@ import ast
 
 # Attribute calls that are always effectful, whoever the receiver is.
 # These names are reserved as execution boundaries / mutation entry points.
-EFFECTFUL_ATTRS = frozenset({"write_parquet", "write_csv", "inplace"})
+EFFECTFUL_ATTRS = frozenset({"write_parquet", "write_csv", "write_zarr",
+                             "inplace"})
 
 # Attribute calls that always execute a computation (runtime, not declarative).
 RUNTIME_ATTRS = frozenset({"collect", "to_numpy", "to_polars", "fit"})

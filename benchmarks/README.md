@@ -12,6 +12,7 @@ native NumPy / Polars code.
 | `bench_pipeline.py` | scan → filter → derive → group → write Parquet, output equality |
 | `bench_memory.py` | snapshot cost (copy-on-write views), branch collection, cache release |
 | `bench_autodiff.py` | gradient graphs of increasing depth/size vs autograd or finite differences, forward/backward split |
+| `bench_chunked.py` | zarr scan→transform→reduce→write vs NumPy, bounded-memory evidence |
 
 ## Method
 
@@ -21,6 +22,9 @@ native NumPy / Polars code.
   instead of it).
 - `peak_rss_mb`: process high-water mark via `resource.getrusage`
   (absolute; maxrss never decreases, so compare across rows, not to zero).
+  Across versions compare `seconds` and `peak_python_alloc_mb`: the RSS
+  floor ratchets with total suite length (more workloads → higher floor
+  for later rows) and is not version-comparable.
 - Correctness: asserted on every run (`allclose` / frame `equals`).
 - Backend/materializations: from `profile()` and `explain()`, never guessed.
 

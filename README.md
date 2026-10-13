@@ -1,4 +1,4 @@
-# TensorLang v0.4
+# TensorLang v0.5.3
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic
@@ -34,12 +34,15 @@ demonstration program.
 Requires Python ≥ 3.12.
 
 ```bash
-pip install -e .          # from the repository root (runs the test suite with pytest)
+pip install -e .          # from the repository root (editable install)
+pytest                    # runs the test suite
 ```
 
 Dependencies (installed automatically): NumPy (dense backend), Polars
-(structured backend), SymPy (symbolic engine), SciPy (available for
-numerical backends), pytest (development).
+(structured backend), SymPy (symbolic engine), SciPy (numerical
+routines), Dask + Zarr (out-of-core chunked execution, v0.5).
+Development extras (`pip install -e ".[dev]"`): pytest, scikit-learn
+(used by ML tests).
 
 v0.2 adds: lazy dataset scans, joins/sorting/unique/conditional/window
 operators, single-query lowering into Polars lazy plans, `explain()` /
@@ -292,7 +295,7 @@ Numerical library: `svd` (`U, S, Vh = svd(A)`, one shared computation),
 `quantile`, `einsum`, `tensordot`, `moveaxis`, `onehot`, `polynomial`.
 See `examples/ml_pipeline.tl` and `LANGUAGE_SPEC.md` §10–§12.
 
-## Developer tooling (v0.4.1 foundations)
+## Developer tooling
 
 Errors carry stable codes (`error[TL0301]: …`, catalogued in
 `docs/ERROR_CODES.md` and generated from one registry). `tensorlang
@@ -304,8 +307,6 @@ summaries (kind, params, graph size, backends, learned state, schema)
 for debuggers and editor tooling — one introspection API, not three
 formatters.
 
-## Developer tooling
-
 ```bash
 tensorlang repl                         # interactive playground (:help inside)
 tensorlang graph FILE [--var V] [--dot] # expression graphs (runs FILE)
@@ -316,6 +317,78 @@ tensorlang errors [CODE]                # error-code catalogue
 tensorlang doctor                       # environment report
 tensorlang bench [--sizes small]        # benchmark suite
 ```
+
+## Out-of-core tensors (v0.5)
+
+Chunking is a physical execution property, not a new operator kind —
+operators see one logical tensor regardless of partitioning:
+
+```python
+data := T.scan_zarr("large.zarr")       # declarative; reads no data
+f := sin({X}) + {X}**2                  # ordinary operator, unchanged meaning
+result = f(data)                        # lazy dask graph, chunk-local
+average = result.mean()                 # tree reduction, bounded memory
+print(average.collect())                # explicit boundary
+result.write_zarr("out.zarr")           # streaming write, never materialized
+```
+
+`T.scan_zarr` exposes logical shape/dtype plus storage metadata (chunks,
+partitions, bytes) via `abstract()` without reading data. Peak working
+memory tracks chunk size, not data size (in-flight chunk buffers ×
+worker threads) — size chunks to fit the budget; `set_chunk_policy()`
+gates admission on modeled working memory. Supported over
+chunks: elementwise math, comparisons, where/clip, shape ops, concat/
+stack, slices, whole-array reductions, and bounded rank-2 matmul with an
+unchunked contract axis. Anything else (sorting, joins, grouping,
+fitting, differentiation, masks, partitioned contractions) raises a
+coded diagnostic with the reason instead of silently materializing.
+`Tensor`/`Lazy` gain `write_zarr()` (staged publication on local
+paths); `inplace()` into chunked sources is rejected;
+fitting/differentiation over chunked data is deferred. See
+`examples/chunked_demo.tl`.
+
+Milestone 2 adds chunk-aware planning: the planner classifies each
+operation (chunk-local, tree-reducible, alignment-, rechunk-,
+neighborhood-dependent, global), aligns mismatched layouts through
+explicit union subdivision (recorded with movement estimates — sides
+only ever split, never shuffle), gates plans against conservative task
+and block-byte limits, and supports metadata-only transpose/moveaxis,
+even merge/split reshapes, and bounded matmuls with an unchunked
+contract axis. Anything else raises coded diagnostics (`TL1010`
+incompatible layouts, `TL1011` unsafe resources, `TL1012` graph
+expansion, `TL1013` global operations) instead of materializing.
+`explain()` shows input/output layouts, plan steps, rechunks, and
+estimates; peak memory tracks chunk size. See
+`examples/chunk_planning.tl`.
+
+Milestone 3 makes memory a planning concern: `set_chunk_policy(
+memory_budget_bytes=..., max_workers=...)` configures an estimated
+incremental working-memory budget (chunk buffers × workers + output +
+graph overhead). Plans admit, admit with reduced concurrency
+(workers → 1), or reject with coded diagnostics (`TL1020` budget
+failure, `TL1021` unbounded estimates, `TL1022` execution-time pressure,
+`TL1023` single-block-too-large, `TL1024` collect-too-large — the last
+suggests streaming `write_zarr`, whose outputs may exceed the budget).
+`explain()` shows the admission decision, `abstract()` carries the
+policy without reading data, and `profile()` reports baseline/peak RSS
+alongside the modeled estimate — labeled separately, since estimates
+are heuristics, not hard process guarantees. See
+`examples/memory_budget.tl`.
+
+Milestone 4 makes execution reliable: every chunked run moves through
+an internal lifecycle (planned → admitted → running → completed/failed/
+cancelled, with a committing stage for writes), visible via
+`execution.last_record()`. Local `write_zarr()` defaults to staged
+publication — complete and validate (chunk census + metadata, data
+never read) in a staging directory, then an atomic same-filesystem
+rename — so failed runs never publish partial outputs and never destroy
+a preexisting valid destination (`overwrite=True` replaces only after
+its replacement validates; `staged=False` keeps direct streaming with
+its documented weaker guarantees). Sources are consistency-checked
+against their planned baseline before execution (`TL1030`, report-once
+semantics); interruption reports `TL1032`; `TL1031`/`TL1033`–`TL1035`
+cover staging, validation, stale-artifact, and cleanup failures with
+recovery paths. See `examples/reliable_execution.tl`.
 
 The REPL compiles every line through the real frontend, so `:=`, `{X}`,
 and effect rules hold interactively; expression statements display
@@ -390,10 +463,12 @@ src/tensorlang/
 │               expression.py (immutable IR) · errors.py
 ├── runtime/    executor.py (evaluation) · mutation.py (inplace)
 │               planner.py (backend selection, constant folding)
+│               chunk_plan.py (out-of-core planning, budgets, publication)
+│               execution.py (per-run lifecycle records)
 ├── operators/  arithmetic, logical, indexing, linear_algebra (elementary),
 │               elementary, statistics, calculus, data_science
-├── backends/   numpy_backend, polars_backend, sympy_backend
-└── cli.py      `tensorlang run|check`
+├── backends/   numpy_backend, polars_backend, sympy_backend, dask_backend
+└── cli.py      `tensorlang run|check|diagnose|errors|repl|graph|explain|profile|doctor|bench`
 ```
 
 ## Testing

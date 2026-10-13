@@ -59,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--skip-pipeline", action="store_true")
     bench.add_argument("--skip-memory", action="store_true")
     bench.add_argument("--skip-autodiff", action="store_true")
+    bench.add_argument("--skip-chunked", action="store_true")
     bench.add_argument("--regen-data", action="store_true",
                        help="regenerate benchmark datasets even when present")
 
@@ -209,8 +210,8 @@ def _doctor() -> None:
     print(f"tensorlang {__import__('tensorlang').__version__}")
     print(f"python {platform.python_version()} ({platform.platform()})")
     print(f"cpus: {__import__('os').cpu_count()}")
-    for package in ("numpy", "polars", "sympy", "scipy", "sklearn",
-                    "autograd", "pytest"):
+    for package in ("numpy", "polars", "sympy", "scipy", "dask", "zarr",
+                    "sklearn", "autograd", "pytest"):
         try:
             module = __import__(package)
             version = getattr(module, "__version__", "present")
@@ -234,7 +235,7 @@ def _bench(args) -> int:
         return 2
     argv = ["run_all.py", "--sizes", *args.sizes]
     for flag in ("skip_dense", "skip_structured", "skip_pipeline",
-                 "skip_memory", "skip_autodiff", "regen_data"):
+                 "skip_memory", "skip_autodiff", "skip_chunked", "regen_data"):
         if getattr(args, flag):
             argv.append("--" + flag.replace("_", "-"))
     old_argv, _sys.argv = _sys.argv, argv

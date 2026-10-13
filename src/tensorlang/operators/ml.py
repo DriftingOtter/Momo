@@ -671,6 +671,15 @@ def _fit_input(data, estimator: str):
     if isinstance(data, Tensor):
         if data._kind == "scan":
             return data._material(), "frame"
+        if data._kind == "chunked":
+            from ..core.errors import TLUnsupportedError
+
+            raise TLUnsupportedError(
+                "fitting on chunked data is deferred in v0.5; collect() "
+                "explicitly to materialize first",
+                code="TL1001",
+                details={"operation": "fit"},
+            )
         return data._material(), data._kind
     if isinstance(data, Lazy):
         return evaluate(data.root)

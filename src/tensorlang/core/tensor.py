@@ -143,6 +143,8 @@ class Tensor:
             return ir.Literal(_readonly_view(self._data), "dense")
         if self._kind == "scan":
             return ir.Scan(self._data)
+        if self._kind == "chunked":
+            return ir.Chunked(self._data)
         return literal_of(self._material())
 
     def _material(self) -> Any:
@@ -156,6 +158,10 @@ class Tensor:
             from ..runtime import io as _io
 
             return _io.materialize_scan(self._data)
+        if self._kind == "chunked":
+            from ..backends import dask_backend as _be
+
+            return _be.read_all(self._data)
         raise TLTypeError(f"unknown tensor kind '{self._kind}'")  # pragma: no cover
 
     def _replace(self, kind: str, payload: Any) -> None:
@@ -174,6 +180,10 @@ class Tensor:
             return tuple(self._data.shape)
         if self._kind == "frame":
             return (self._data.height, self._data.width)
+        if self._kind == "chunked":
+            from ..backends import dask_backend as _be
+
+            return _be.describe(self._data).shape
         if self._kind == "scan":
             raise TLTypeError(
                 "a lazy scan has no known shape until it is collected; "
@@ -185,6 +195,8 @@ class Tensor:
     def rank(self) -> int:
         if self._kind == "dense":
             return int(self._data.ndim)
+        if self._kind == "chunked":
+            return len(self.shape)
         if self._kind == "scan":
             raise TLTypeError("a lazy scan has no known rank until collected")
         if self._kind == "frame":
@@ -201,6 +213,12 @@ class Tensor:
             return self._data.dtype
         if self._kind in ("frame", "scan"):
             return dict(self.schema)
+        if self._kind == "chunked":
+            import numpy as _np
+
+            from ..backends import dask_backend as _be
+
+            return _np.dtype(_be.describe(self._data).dtype)
         return self._data.dtype
 
     @property
@@ -219,6 +237,9 @@ class Tensor:
             return list(self.schema)
         if self._kind == "series":
             return [self._data.name]
+        if self._kind == "chunked":
+            raise TLTypeError(
+                "chunked arrays are dense N-D data without named fields")
         raise TLTypeError("fields are only defined for structured tensors")
 
     @property
@@ -247,6 +268,9 @@ class Tensor:
             return np.array(self._data, copy=True)
         if self._kind == "series":
             return self._data.to_numpy()
+        if self._kind == "chunked":
+            # Explicit boundary: materializes the whole store.
+            return self._material()
         raise TLTypeError(
             "to_numpy() is undefined for heterogeneous structured tensors; "
             "select numerical fields first or use to_polars()"
@@ -311,6 +335,11 @@ class Tensor:
             return int(self._data.shape[0])
         if self._kind == "frame":
             return self._data.height
+        if self._kind == "chunked":
+            shape = self.shape
+            if not shape:
+                raise TLTypeError("len() of a rank-zero tensor is undefined")
+            return int(shape[0])
         if self._kind == "scan":
             raise TLTypeError(
                 "len() of a lazy scan is unknown until collected; "
@@ -349,6 +378,11 @@ class Tensor:
                 "cannot assign into a lazy scan descriptor; collect() it "
                 "into a tensor first"
             )
+        if self._kind == "chunked":
+            raise TLTypeError(
+                "cannot assign into persistent chunked storage; collect() "
+                "into a tensor first, or write a new store"
+            )
 
         if isinstance(key, Lazy):
             key, _ = evaluate(key.root)
@@ -380,6 +414,11 @@ class Tensor:
                 f"series tensor has a single field '{self._data.name}', "
                 f"not '{name}'"
             )
+        if self._kind == "chunked":
+            raise AttributeError(
+                f"chunked arrays are dense N-D data without named fields "
+                f"(got '{name}')"
+            )
         raise AttributeError(
             f"dense tensor has no field '{name}'; fields exist only on "
             f"structured tensors"
@@ -388,7 +427,7 @@ class Tensor:
     # -- named transformations (all non-mutating -> Lazy) ---------------------------
     @property
     def T(self) -> "Lazy":
-        if self._kind != "dense":
+        if self._kind not in ("dense", "chunked"):
             raise TLUnsupportedError(
                 "transpose is undefined for heterogeneous structured tensors",
                 code="TL0901",
@@ -400,7 +439,7 @@ class Tensor:
         return self.T
 
     def reshape(self, *shape) -> "Lazy":
-        if self._kind != "dense":
+        if self._kind not in ("dense", "chunked"):
             raise TLUnsupportedError(
                 "reshape is undefined for structured tensors",
                 code="TL0901",
@@ -505,6 +544,53 @@ class Tensor:
         value = self._material()
         kind = self._kind if self._kind != "scan" else "frame"
         return _io.write_value(value, kind, path, "csv")
+
+    def write_zarr(self, path: str, overwrite: bool = False,
+                   staged: bool | None = None) -> str:
+        """Explicit execution boundary: write the pipeline into a zarr
+        store without full materialization.
+
+        Local destinations default to staged publication (complete and
+        validate in a staging directory, then atomically rename), so a
+        failed run never publishes a partial output and never destroys a
+        preexisting valid destination. ``staged=False`` keeps direct
+        streaming (lower storage overhead; partial outputs possible after
+        failure). Outputs may exceed the working-memory budget: streaming
+        is the documented alternative to materialization.
+        """
+        from ..runtime import chunk_plan as _chunk
+
+        if self._kind == "scan":
+            raise TLTypeError(
+                "cannot write a row-oriented scan to N-D zarr storage; "
+                "collect() it first or select numeric data explicitly")
+        node: ir.Expr = (ir.Chunked(self._data) if self._kind == "chunked"
+                         else self._snapshot_node())
+        try:
+            _chunk.write_or_raise(node, path, overwrite, staged=staged)
+            return path
+        except (TLTypeError, TLUnsupportedError):
+            raise
+        except Exception as exc:
+            raise TLUnsupportedError(
+                f"cannot write this pipeline to zarr without full "
+                f"materialization: {exc}; collect() explicitly first",
+                code="TL1001",
+                details={"reason": str(exc)},
+            )
+
+    def describe_write(self, path: str, overwrite: bool = False,
+                       staged: bool | None = None) -> str:
+        """Read-only write plan: publication strategy, destination status,
+        and resource admission (never executes, never writes)."""
+        from ..runtime import chunk_plan as _chunk
+
+        if self._kind == "scan":
+            node: ir.Expr = self._snapshot_node()
+        else:
+            node = (ir.Chunked(self._data) if self._kind == "chunked"
+                    else self._snapshot_node())
+        return _chunk.describe_write(node, path, overwrite, staged=staged)
 
     def explain(self) -> str:
         from ..runtime.inspect import explain_lazy
@@ -616,8 +702,15 @@ class Lazy:
     # -- execution ----------------------------------------------------------------------
     def collect(self):
         """Execute the graph and return the materialized result."""
+        from ..runtime import chunk_plan as _chunk
         from ..runtime.executor import evaluate, collect_value
 
+        if _chunk.contains_chunked(self._root):
+            value, kind, _ = _chunk.collect_or_raise(self._root)
+            if not self._has_cached:
+                self._cached = collect_value(value, kind)
+                self._has_cached = True
+            return self._cached
         if not self._has_cached:
             value, kind = evaluate(self._root)
             self._cached = collect_value(value, kind)
@@ -837,6 +930,42 @@ class Lazy:
         value, kind = evaluate(self._root)
         return _io.write_value(collect_value(value, kind), kind, path, "csv")
 
+    def write_zarr(self, path: str, overwrite: bool = False,
+                   staged: bool | None = None) -> str:
+        """Explicit execution boundary: write the pipeline into a zarr
+        store without full materialization.
+
+        Local destinations default to staged publication (complete and
+        validate in a staging directory, then atomically rename), so a
+        failed run never publishes a partial output and never destroys a
+        preexisting valid destination. ``staged=False`` keeps direct
+        streaming (lower storage overhead; partial outputs possible after
+        failure).
+        """
+        from ..runtime import chunk_plan as _chunk
+
+        try:
+            _chunk.write_or_raise(self._root, path, overwrite, staged=staged)
+            return path
+        except (TLTypeError, TLUnsupportedError):
+            raise
+        except Exception as exc:
+            raise TLUnsupportedError(
+                f"cannot write this pipeline to zarr without full "
+                f"materialization: {exc}; collect() explicitly first",
+                code="TL1001",
+                details={"reason": str(exc)},
+            )
+
+    def describe_write(self, path: str, overwrite: bool = False,
+                       staged: bool | None = None) -> str:
+        """Read-only write plan: publication strategy, destination status,
+        and resource admission (never executes, never writes)."""
+        from ..runtime import chunk_plan as _chunk
+
+        return _chunk.describe_write(self._root, path, overwrite,
+                                     staged=staged)
+
     def explain(self) -> str:
         """Logical IR graph plus physical backend plan (no execution)."""
         from ..runtime.inspect import explain_lazy
@@ -954,3 +1083,16 @@ class T(Tensor):
             ScanSpec(tuple(flat), "csv", tuple(sorted(options.items()))),
             PROVENANCE_DESCRIPTOR,
         )
+
+    @staticmethod
+    def scan_zarr(path: str) -> Tensor:
+        """Describe a lazily scanned persistent zarr array (reads no data).
+
+        Declarative: the result is a source descriptor, legal under ``:=``.
+        Only store metadata (shape/dtype/chunks) is inspected, lazily, on
+        first need; array data flows chunk-by-chunk at explicit execution
+        boundaries (``collect()`` / ``write_zarr()`` / ``profile()``).
+        The operator always sees one logical tensor regardless of how many
+        chunks back it.
+        """
+        return Tensor._from_parts("chunked", str(path), PROVENANCE_DESCRIPTOR)

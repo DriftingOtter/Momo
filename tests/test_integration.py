@@ -161,3 +161,146 @@ def test_v04_gradient_descent_example():
     repo_examples = _Path(__file__).resolve().parent.parent / "examples"
     ns = run_file(repo_examples / "gradient_descent.tl")
     assert np.allclose(ns["w"].collect(), [3.0, -2.0], atol=1e-4)
+
+
+def test_v05_chunked_demo_example(tmp_path):
+    import shutil
+    from pathlib import Path as _Path
+
+    import zarr
+
+    repo_examples = _Path(__file__).resolve().parent.parent / "examples"
+    workdir = tmp_path / "chunked"
+    (workdir / "data").mkdir(parents=True)
+    for name in ("chunked_demo.tl", "make_chunked_data.py"):
+        shutil.copy(repo_examples / name, workdir / name)
+    import subprocess as _sp
+    import sys as _sys
+
+    _sp.run([_sys.executable, str(workdir / "make_chunked_data.py"),
+             "--rows", "2000", "--cols", "4",
+             "--out", str(workdir / "data" / "large-demo.zarr")],
+            check=True, capture_output=True)
+    ns = run_file(workdir / "chunked_demo.tl")
+    ref = zarr.open_array(workdir / "data" / "large-demo.zarr", mode="r")[:]
+    assert ns["average"].collect() == pytest.approx(
+        float((np.sin(ref) + ref**2).mean()))
+    out = zarr.open_array(workdir / "data" / "processed-demo.zarr", mode="r")
+    assert out.shape == (2000, 4)
+    assert np.allclose(out[:], np.sin(ref) + ref**2)
+    assert "dask-chunked" in ns["result"].explain()
+
+
+def test_v05_chunk_planning_demo(tmp_path):
+    import shutil
+    from pathlib import Path as _Path
+
+    import zarr
+
+    repo_examples = _Path(__file__).resolve().parent.parent / "examples"
+    workdir = tmp_path / "planning"
+    (workdir / "data").mkdir(parents=True)
+    for name in ("chunk_planning.tl", "make_chunked_data.py"):
+        shutil.copy(repo_examples / name, workdir / name)
+    import subprocess as _sp
+    import sys as _sys
+
+    _sp.run([_sys.executable, str(workdir / "make_chunked_data.py"),
+             "--rows", "4000", "--cols", "4", "--chunk-rows", "1000",
+             "--chunk-rows-b", "2000",
+             "--out", str(workdir / "data" / "large-demo.zarr"),
+             "--out-b", str(workdir / "data" / "other-demo.zarr")],
+            check=True, capture_output=True)
+    ns = run_file(workdir / "chunk_planning.tl")
+    assert "rechunk" in ns["m"].explain()
+    out = zarr.open_array(workdir / "data" / "planned-demo.zarr", mode="r")
+    assert out.shape == (4000, 4)
+
+
+def test_v05_memory_budget_demo(tmp_path):
+    import shutil
+    from pathlib import Path as _Path
+
+    import zarr
+
+    repo_examples = _Path(__file__).resolve().parent.parent / "examples"
+    workdir = tmp_path / "budget"
+    (workdir / "data").mkdir(parents=True)
+    for name in ("memory_budget.tl", "make_chunked_data.py"):
+        shutil.copy(repo_examples / name, workdir / name)
+    import subprocess as _sp
+    import sys as _sys
+
+    _sp.run([_sys.executable, str(workdir / "make_chunked_data.py"),
+             "--rows", "4000", "--cols", "4", "--chunk-rows", "1000",
+             "--out", str(workdir / "data" / "large-demo.zarr")],
+            check=True, capture_output=True)
+    ns = run_file(workdir / "memory_budget.tl")
+    ref = zarr.open_array(workdir / "data" / "large-demo.zarr", mode="r")[:]
+    assert ns["average"].collect() == pytest.approx(
+        float((ref**2 + ref).mean()))
+    out = zarr.open_array(workdir / "data" / "planned-budget.zarr", mode="r")
+    assert out.shape == (4000, 4)
+    assert np.allclose(out[:], ref**2 + ref)
+    assert "resources" in ns["m"].explain()
+    from tensorlang import clear_chunk_policy as _clear
+    from tensorlang import set_chunk_policy as _set
+
+    _set(memory_budget_bytes=2800000, max_workers=2)
+    try:
+        assert ns["average"].profile().budget_mb == pytest.approx(2.8)
+    finally:
+        _clear()
+
+
+def test_v05_reliable_execution_demo(tmp_path):
+    import shutil
+    from pathlib import Path as _Path
+
+    import zarr
+
+    repo_examples = _Path(__file__).resolve().parent.parent / "examples"
+    workdir = tmp_path / "reliable"
+    (workdir / "data").mkdir(parents=True)
+    for name in ("reliable_execution.tl", "make_chunked_data.py"):
+        shutil.copy(repo_examples / name, workdir / name)
+    import subprocess as _sp
+    import sys as _sys
+
+    _sp.run([_sys.executable, str(workdir / "make_chunked_data.py"),
+             "--rows", "4000", "--cols", "4", "--chunk-rows", "1000",
+             "--out", str(workdir / "data" / "large-demo.zarr")],
+            check=True, capture_output=True)
+    ns = run_file(workdir / "reliable_execution.tl")
+    ref = zarr.open_array(workdir / "data" / "large-demo.zarr", mode="r")[:]
+    out = zarr.open_array(workdir / "data" / "reliable-demo.zarr", mode="r")
+    assert out.shape == (4000, 4)
+    assert np.allclose(out[:], ref**2 + ref)
+    assert "staged" in ns["m"].describe_write(
+        str(workdir / "data" / "reliable-demo.zarr"), overwrite=True)
+
+
+def test_v05_release_check_workflow(tmp_path):
+    import shutil
+    from pathlib import Path as _Path
+
+    import zarr
+
+    repo_examples = _Path(__file__).resolve().parent.parent / "examples"
+    workdir = tmp_path / "release"
+    (workdir / "data").mkdir(parents=True)
+    for name in ("release_check.tl", "make_chunked_data.py"):
+        shutil.copy(repo_examples / name, workdir / name)
+    import subprocess as _sp
+    import sys as _sys
+
+    _sp.run([_sys.executable, str(workdir / "make_chunked_data.py"),
+             "--rows", "4000", "--cols", "4", "--chunk-rows", "1000",
+             "--out", str(workdir / "data" / "large-demo.zarr")],
+            check=True, capture_output=True)
+    ns = run_file(workdir / "release_check.tl")
+    ref = zarr.open_array(workdir / "data" / "large-demo.zarr", mode="r")[:]
+    assert ns["average"] == pytest.approx(float((ref**2 + ref).mean()))
+    out = zarr.open_array(workdir / "data" / "release-check.zarr", mode="r")
+    assert out.shape == (4000, 4)
+    assert np.allclose(out[:], ref**2 + ref)

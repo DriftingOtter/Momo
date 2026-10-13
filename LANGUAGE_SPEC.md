@@ -1,4 +1,4 @@
-# TensorLang Language Specification — v0.3
+# TensorLang Language Specification — v0.5.3
 
 This document defines TensorLang independently of its backing libraries
 (NumPy, Polars, SymPy, SciPy). Implementations must honor the observable
@@ -236,7 +236,7 @@ multi-parameter `wrt` returns gradients in order.
   Heterogeneous frames on differentiable paths are rejected (select
   numeric fields explicitly).
 
-## 14. Errors
+## 15. Errors
 
 Typed errors with source locations where applicable: syntax, scope,
 declaration/effect, type, shape, mutation, symbolic, differentiation
@@ -252,7 +252,117 @@ and are stable API: tools and programmers may rely on them across message
 rewording. Ranges mirror the categories above; `x99` in each range is the
 generic class fallback for sites not yet individually coded.
 
-## 15. Version history
+## 16. Chunked tensors (v0.5)
+
+Chunking is a physical execution property, not a new operator kind.
+`T.scan_zarr(path)` describes a persistent array without reading data
+(declarative, legal under `:=`); only store metadata (logical shape,
+dtype, chunk shape, partition count, byte counts) is inspected, lazily.
+Operators observe one logical tensor regardless of partitioning.
+
+Supported over chunks in M1: elementwise arithmetic/comparisons, the six
+elementary functions, where/clip, null masks, transpose/reshape/flatten,
+concat/stack, integer/slice indexing, and whole-array reductions
+(tree-combined, bounded memory). Anything else raises `TL1001` naming the
+operation instead of silently materializing. `write_zarr(path)` streams
+chunk-by-chunk (`TL1002` unless `overwrite=True`); `inplace()` into
+chunked sources is rejected; fitting and differentiation over chunked
+data are deferred (`TL1001` / `TL0809`).
+
+`abstract()` reports logical shape, dtype, storage, chunks, partitions,
+byte counts, and materialized status without reading data; unknown
+dimensions would stay explicitly unknown (zarr metadata always provides
+them). Peak working memory tracks chunk size rather than data size
+(in-flight chunk buffers times worker threads): size chunks to fit the
+budget. `explain()` shows the dask plan (partitions, tasks, output
+shape); `profile()` reports the `dask-chunked` backend with chunk
+execution counts.
+
+Milestone 2 classifies each operation by physical requirements —
+chunk-local, tree-reducible, alignment-dependent, rechunk-dependent,
+neighborhood, global — and records the classification in the plan.
+Multi-input operations align to the finest common boundary subdivision
+(sides only split, never shuffle); broadcast axes need no movement.
+Admission is gated by conservative task-count and block-byte limits
+(heuristics, not guarantees; adjustable for tests and power users).
+Transpose/moveaxis are metadata-only; reshape admits even merge/split
+layouts and rejects unsafe merges; matmul admits rank-2 products with an
+unchunked contract axis; masks, fancy indexing, sorting, joins, grouping,
+contractions, fitting, and differentiation stay rejected with specific
+codes. Mathematical validity (shapes, dtypes) is always checked
+separately from physical feasibility, with distinct error categories.
+
+Milestone 3 adds an explicit memory-budget contract
+(`set_chunk_policy(memory_budget_bytes=..., max_workers=...)`; no
+language-grammar change). The budget covers *estimated incremental
+working memory*: per-task working sets (operator-specific models from
+chunk layouts × dtypes: inputs, outputs, temporaries, broadcast/
+rechunk/reduction/matmul intermediates) times active workers, plus
+output materialization for `collect()` (one output block for streaming
+sinks) plus a linear task-graph overhead term. Included and excluded
+allocations are documented in `runtime/chunk_plan.py`: baseline
+interpreter/BLAS/thread-pool allocations, allocator fragmentation, and
+already-running native operations are NOT modeled, and Dask's own
+worker limits are best-effort (its pause mechanism cannot stop running
+tasks) — so estimates are planning heuristics, and only the operating
+system can enforce hard process containment. Unknown requirements are
+never treated as zero (`TL1021`).
+
+Decisions are inspectable per purpose (`collect` vs `stream`): admitted,
+admitted with reduced concurrency (workers → 1; the planner never
+silently rechunks data to fit a budget), or rejected (`TL1020` modeled
+peak over budget with a suggested budget, `TL1023` single-block over
+budget needing smaller chunks, `TL1024` collect-output over budget
+suggesting `write_zarr`, whose outputs may exceed the working budget).
+Concurrency uses a per-call worker cap — never global Dask config, never
+leaking between executions. `collect()` checks output size against the
+budget; rejected computations never fall back to NumPy evaluation.
+Runtime monitoring records baseline/peak high-water RSS and the delta
+above baseline separately from the modeled estimate; far-above-budget
+observations report `TL1022` pressure (already-running native operations
+may transiently overshoot). `explain()` shows the admission decision and
+its assumptions, `abstract()` carries the policy without reading data,
+and `profile()` reports baseline/peak/estimated/budget/workers/tasks
+with estimates, measurements, and unavailable values clearly labeled.
+Writes are incremental, never claimed atomic.
+
+Milestone 4 adds execution reliability without new syntax. Each chunked
+run follows an internal lifecycle — planned, admitted, running,
+committing (writes), completed, failed, or cancelled — recorded per run
+(no user-managed state object, no leakage across runs) and summarized
+for `profile()` tooling. Persistent output has two modes on one surface
+(`write_zarr(path, overwrite=False, staged=None)`): direct streaming
+(lower storage overhead; partial outputs possible after failure) and
+staged publication (default for local stores; complete and validate in
+a same-filesystem staging directory — chunk census and metadata only,
+never data reads — then an atomic rename). Staged runs never publish a
+partial dataset as success and never destroy a preexisting valid
+destination before its replacement validates (`overwrite=True` swaps via
+a backup round-trip); concurrent publications are detected at publish
+time (loser keeps its validated staging for recovery). Non-local stores
+keep direct streaming with a documented warning — no distributed
+transactions are introduced.
+
+Failures preserve valid destinations, release run resources, clean
+staging (validated-but-unpublished staging is retained and reported,
+never silently deleted), and keep source-level plus backend error
+information; interrupted runs (`KeyboardInterrupt`/cancellation) stop
+scheduling new work while recognizing that running native tasks may
+finish, then clean up once workers stop. Abrupt process termination
+cannot run cleanup: stale staging is identifiable and removable via
+`tensorlang.runtime.chunk_plan.list_stale_staging()` /
+`recover_stale_staging()` (see `docs/RECOVERY.md`). External sources are
+checked against their planned baseline before execution (shape/dtype/
+chunk changes always caught; content-only changes best-effort via
+filesystem stamps, with report-once resynchronization); in-memory
+snapshot semantics are unchanged, and no full-dataset reads are used
+for validation. Disk-space (storage) and RAM-budget requirements are
+reported separately; no rechunk-to-fit is introduced. New diagnostics
+`TL1030`–`TL1035` flow through the existing registry, and `write_zarr`
+is classified effectful so `:=` cannot bypass I/O protection
+(`describe_write()` is read-only introspection).
+
+## 17. Version history
 
 - **v0.1**: frontend, scoped operators, dense/structured/symbolic core,
   lazy execution, explicit mutation.
@@ -267,3 +377,22 @@ generic class fallback for sites not yet individually coded.
   `value_and_grad`, `vjp`) over existing operator graphs with
   vector-Jacobian rules, fitted-affine differentiation, structured
   gradients with label preservation, and phase-split profiling.
+- **v0.5 M1**: chunked tensor foundation — `T.scan_zarr` lazy persistent
+  sources, dask-backed lowering for elementwise/shape/reduction graphs,
+  streaming `write_zarr`, bounded-memory execution, `TL10xx` diagnostics,
+  chunk metadata in `abstract()`/`explain()`/`profile()`.
+- **v0.5 M2**: chunk-aware planning — operation capability classes, union
+  subdivision alignment with recorded movement, policy gates (tasks, block
+  bytes), bounded matmul, reshape/transpose planning, `TL1010`–`TL1013`
+  diagnostics, plan introspection with estimates.
+- **v0.5 M3**: memory budgeting and runtime resource control —
+  working-memory budget with per-task resource models, admit /
+  admit-reduced-concurrency / reject decisions per purpose, per-call
+  worker caps, baseline-vs-estimate monitoring, streaming outputs larger
+  than the budget, `TL1020`–`TL1024` diagnostics, estimate-vs-measured
+  introspection.
+- **v0.5 M4**: execution reliability and persistent data integrity —
+  per-run lifecycle states, staged publication with atomic local rename,
+  output validation without data reads, source-consistency checks with
+  report-once resynchronization, interruption/cancellation handling,
+  stale-staging recovery, `TL1030`–`TL1035` diagnostics.
