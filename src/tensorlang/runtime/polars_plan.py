@@ -114,6 +114,11 @@ def _lower_getitem(node: ir.GetItem, ctx: _LowerContext) -> pl.LazyFrame:
 def _lower_reduce(node: ir.Reduce, ctx: _LowerContext) -> pl.LazyFrame:
     base, numeric = _reduce_source(node, ctx)
     agg = node.op
+    if node.axis is not None:
+        # Axis reductions over structured frames are ambiguous (rows vs
+        # fields); decline lowering so the executor reports TL0511.
+        raise _NotLowerable(
+            f"reduction '{node.op}' with axis has no lazy-frame lowering")
     if node.by is None:
         return base.select([getattr(pl.col(c), agg)().alias(c) for c in numeric])
     key = _group_key(node.by)

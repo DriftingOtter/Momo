@@ -58,7 +58,7 @@ from .runtime.chunk_plan import (
     set_chunk_policy,
 )
 
-__version__ = "0.5.3"
+__version__ = "0.6.0"
 
 __all__ = [
     "T", "Tensor", "Lazy", "Operator", "P",

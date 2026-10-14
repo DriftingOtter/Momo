@@ -1,0 +1,93 @@
+{
+  "version": "v2",
+  "n": 2000,
+  "tensorlang": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        8.67 real         7.41 user         0.57 sys\n          1058455552  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              115063  page reclaims\n                 178  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 151  voluntary context switches\n                7171  involuntary context switches\n         66162154800  instructions retired\n         15522122710  cycles elapsed\n          1037337992  peak memory footprint\n",
+    "phases": {
+      "build": {
+        "median_s": 0.009308083012001589,
+        "min_s": 0.009262374995159917,
+        "max_s": 0.01074454199988395,
+        "repeats": 5
+      },
+      "energy": {
+        "median_s": 0.10218633299518842,
+        "min_s": 0.0994249579962343,
+        "max_s": 0.24162595799134579,
+        "repeats": 5
+      },
+      "gradient": {
+        "median_s": 0.8958907089981949,
+        "min_s": 0.8682476669928292,
+        "max_s": 0.8994352910085581,
+        "repeats": 5
+      },
+      "inertia+eigh": {
+        "median_s": 0.0003154579899273813,
+        "min_s": 0.00028608400316443294,
+        "max_s": 0.0004722090088762343,
+        "repeats": 5
+      },
+      "center_of_mass": {
+        "median_s": 7.245899178087711e-05,
+        "min_s": 6.804100121371448e-05,
+        "max_s": 9.050000517163426e-05,
+        "repeats": 5
+      },
+      "force_law_symbolic": {
+        "median_s": 0.00016058300388976932,
+        "min_s": 0.0001564999984111637,
+        "max_s": 0.00017133400251623243,
+        "repeats": 5
+      }
+    },
+    "checks": {
+      "energy": 1.4079647867285108e+20,
+      "grad_max_err": 8388608.0
+    },
+    "peak_rss_mb": 1058.455552,
+    "peak_rss_source": "time -l"
+  },
+  "native": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        2.81 real         2.69 user         0.11 sys\n           433291264  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               28732  page reclaims\n                 138  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   1  voluntary context switches\n                 105  involuntary context switches\n         24042550777  instructions retired\n          5520393611  cycles elapsed\n           404669352  peak memory footprint\n",
+    "phases": {
+      "energy": {
+        "median_s": 0.15783700000611134,
+        "min_s": 0.15218162500241306,
+        "max_s": 0.16152866699849255,
+        "repeats": 5
+      },
+      "gradient": {
+        "median_s": 0.218053125005099,
+        "min_s": 0.20717379098641686,
+        "max_s": 0.2205304579983931,
+        "repeats": 5
+      },
+      "inertia+eigh": {
+        "median_s": 3.650000144261867e-05,
+        "min_s": 3.420800203457475e-05,
+        "max_s": 5.308300023898482e-05,
+        "repeats": 5
+      },
+      "center_of_mass": {
+        "median_s": 2.9208007617853582e-05,
+        "min_s": 2.7667003450915217e-05,
+        "max_s": 3.529200330376625e-05,
+        "repeats": 5
+      }
+    },
+    "checks": {
+      "energy": 1.4079647867285108e+20
+    },
+    "peak_rss_mb": 433.291264,
+    "peak_rss_source": "time -l"
+  },
+  "loc": {
+    "tensorlang": 27,
+    "native": 20
+  }
+}

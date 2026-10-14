@@ -174,7 +174,8 @@ def fold_constants(node: ir.Expr) -> ir.Expr:
             return ir.GetItem(visit(n.obj), visit(n.index))
         if isinstance(n, ir.Reduce):
             return ir.Reduce(n.op, visit(n.operand),
-                             visit(n.by) if n.by is not None else None)
+                             visit(n.by) if n.by is not None else None,
+                             n.axis, n.keepdims)
         return n
 
     return visit(node)

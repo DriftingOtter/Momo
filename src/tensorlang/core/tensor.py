@@ -429,7 +429,8 @@ class Tensor:
     def T(self) -> "Lazy":
         if self._kind not in ("dense", "chunked"):
             raise TLUnsupportedError(
-                "transpose is undefined for heterogeneous structured tensors",
+                f"transpose is undefined for {self._kind} tensors: "
+                f"select numerical data explicitly first",
                 code="TL0901",
                 details={"operation": "transpose", "kind": self._kind},
             )
@@ -456,23 +457,41 @@ class Tensor:
             )
         return Lazy(ir.Flatten(self._snapshot_node()))
 
-    def sum(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("sum", self._snapshot_node(), _by_expr(by)))
+    def sum(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("sum", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
-    def mean(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("mean", self._snapshot_node(), _by_expr(by)))
+    def mean(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("mean", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
-    def min(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("min", self._snapshot_node(), _by_expr(by)))
+    def min(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("min", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
-    def max(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("max", self._snapshot_node(), _by_expr(by)))
+    def max(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("max", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
-    def std(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("std", self._snapshot_node(), _by_expr(by)))
+    def std(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("std", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
-    def var(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("var", self._snapshot_node(), _by_expr(by)))
+    def var(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("var", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
 
     def is_null(self) -> "Lazy":
         return Lazy(ir.FuncCall("is_null", (self._snapshot_node(),)))
@@ -845,23 +864,41 @@ class Lazy:
     def flatten(self) -> "Lazy":
         return Lazy(ir.Flatten(self._root))
 
-    def sum(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("sum", self._root, _by_expr(by)))
+    def sum(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("sum", self._root, _by_expr(by),
+                              axis, keepdims))
 
-    def mean(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("mean", self._root, _by_expr(by)))
+    def mean(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("mean", self._root, _by_expr(by),
+                              axis, keepdims))
 
-    def min(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("min", self._root, _by_expr(by)))
+    def min(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("min", self._root, _by_expr(by),
+                              axis, keepdims))
 
-    def max(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("max", self._root, _by_expr(by)))
+    def max(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("max", self._root, _by_expr(by),
+                              axis, keepdims))
 
-    def std(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("std", self._root, _by_expr(by)))
+    def std(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("std", self._root, _by_expr(by),
+                              axis, keepdims))
 
-    def var(self, by=None) -> "Lazy":
-        return Lazy(ir.Reduce("var", self._root, _by_expr(by)))
+    def var(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
+        data (tuples and negative axes allowed)."""
+        return Lazy(ir.Reduce("var", self._root, _by_expr(by),
+                              axis, keepdims))
 
     def is_null(self) -> "Lazy":
         return Lazy(ir.FuncCall("is_null", (self._root,)))

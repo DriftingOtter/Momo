@@ -616,17 +616,40 @@ def lower(node: ir.Expr, ctx: _ChunkContext, env: dict) -> object:
             raise _NotChunkable(f"stack failed: {exc}")
     if isinstance(node, ir.Reduce):
         if node.by is not None:
+            if node.axis is not None:
+                raise _NotChunkable(
+                    f"reduction '{node.op}' cannot combine grouped 'by' "
+                    f"with 'axis'",
+                    code="TL1001",
+                    details={"operation": node.op})
             raise _global("grouped reduction", "grouped aggregation")
+        from ..core.expression import resolve_axes as _resolve_axes
+
         operand = lower(node.operand, ctx, env)
+        shape = tuple(operand.shape)
+        axes = _resolve_axes(node.axis, len(shape), node.op, shape)
         try:
-            out = getattr(operand, _REDUCTIONS[node.op])()
+            out = getattr(operand, _REDUCTIONS[node.op])(
+                axis=list(axes), keepdims=bool(node.keepdims))
         except (AttributeError, ValueError) as exc:
             raise _NotChunkable(f"reduction '{node.op}' failed: {exc}")
-        ctx.plan.step("tree-reducible", node.op,
-                      f"{_nparts(operand)} partitions -> scalar (tree combine)")
-        _track(ctx, _block_bytes(operand)
-               + max(_nparts(operand), 0) * max(_itemsize(operand), 0) * 4,
-               f"reduction '{node.op}' (input block + partial buffers)")
+        if axes:
+            detail = (f"axes {list(axes)} keepdims={bool(node.keepdims)}: "
+                      f"{_nparts(operand)} partitions -> "
+                      f"{_chunks_of(out)} (tree combine)")
+        else:
+            detail = (f"{_nparts(operand)} partitions -> scalar "
+                      f"(tree combine)")
+        ctx.plan.step("tree-reducible", node.op, detail)
+        if axes:
+            _track(ctx, _block_bytes(operand) + _block_bytes(out)
+                   + _reduced_partial_bytes(operand, axes, out),
+                   f"reduction '{node.op}' (input + output blocks + "
+                   f"axis partials)")
+        else:
+            _track(ctx, _block_bytes(operand)
+                   + max(_nparts(operand), 0) * max(_itemsize(operand), 0) * 4,
+                   f"reduction '{node.op}' (input block + partial buffers)")
         return out
     if isinstance(node, ir.ApplyOp):
         return _lower_apply(node, ctx, env)
@@ -939,6 +962,19 @@ def _lower_matmul(node: ir.BinOp, ctx, env):
     _track(ctx, _matmul_working(left, right, a_shape, b_shape),
            "matmul (row panel + column panel + output block per task)")
     return _admit(out, ctx, "matmul")
+
+
+def _reduced_partial_bytes(graph, axes: tuple, out) -> int:
+    """Tree-combine buffers for an axis reduction: each output element
+    combines one partial per input chunk along the reduced axes."""
+    try:
+        chunks = _chunks_of(graph)
+        factor = 1
+        for ax in axes:
+            factor *= max(len(chunks[ax]), 1)
+        return factor * _block_bytes(out)
+    except Exception:  # pragma: no cover - defensive
+        return -1
 
 
 def _matmul_working(left, right, a_shape, b_shape) -> int:
@@ -1662,6 +1698,7 @@ def write_or_raise(root: ir.Expr, path: str, overwrite: bool,
         rec.timings_ms.update(write_info)
         baseline = _rss_peak_mb()
         if strategy == "direct":
+            _baseline_own_output(dest)
             _record(decision, _observed_for(decision, baseline,
                                             _rss_peak_mb(), workers))
             plan_text = (plan_text + "\n  publication: direct streaming "
@@ -1708,6 +1745,7 @@ def write_or_raise(root: ir.Expr, path: str, overwrite: bool,
         staging = None  # published: nothing to clean
         rec.timings_ms["publish_ms"] = (_time.perf_counter()
                                         - t_publish) * 1000.0
+        _baseline_own_output(dest)
         _record(decision, _observed_for(decision, baseline,
                                         _rss_peak_mb(), workers))
         plan_text = (plan_text + "\n  publication: staged "
@@ -1754,6 +1792,26 @@ def write_or_raise(root: ir.Expr, path: str, overwrite: bool,
         raise TLUnsupportedError(
             f"operation is not chunk-lowerable in v0.5: {exc.reason}",
             code=exc.code, details=exc.details)
+
+
+def _baseline_own_output(dest: str) -> None:
+    """A successful publish establishes the source baseline for ``dest``.
+
+    Without this, re-reading own output later in a long-lived process
+    trips TL1030 on the mtime change from our own write (false positive:
+    report-once would demand a pointless retry). External modifications
+    after our publish are still detected against this baseline.
+    Best-effort: fingerprint failures leave prior state untouched.
+    """
+    from ..backends import dask_backend as _be
+
+    try:
+        fresh = _be.fingerprint(dest)
+    except Exception:
+        return
+    if len(_SOURCE_BASELINES) >= _SOURCE_BASELINE_LIMIT:
+        _SOURCE_BASELINES.pop(next(iter(_SOURCE_BASELINES)))
+    _SOURCE_BASELINES[dest] = fresh
 
 
 def _cleanup_best_effort(staging: str | None) -> None:

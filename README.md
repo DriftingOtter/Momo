@@ -1,4 +1,4 @@
-# TensorLang v0.5.3
+# TensorLang v0.6.0
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic

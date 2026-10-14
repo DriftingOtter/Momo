@@ -265,6 +265,7 @@ class _GradShared:
         self.diffvars: dict[tuple[str, str], ir.Expr] = {}
         self.last_forward_ms: float | None = None
         self.last_backward_ms: float | None = None
+        self.last_released_cotangents: int = 0
 
     def forward(self):
         if self.output is None:
@@ -278,7 +279,9 @@ class _GradShared:
                     code="TL0809",
                 )
             t0 = time.perf_counter()
-            result, cache = trace_evaluate(self.root)
+            # Keep-forever tape: reverse() and later applies re-read
+            # forward values after the pass (forward_runs == 1).
+            result, cache = trace_evaluate(self.root, release=False)
             self.values = {key: entry[1] for key, entry in cache.items()}
             self.order = _postorder(self.root)
             for node in self.order:
@@ -302,11 +305,26 @@ class _GradShared:
             seed_value, seed_kind = _check_seed(
                 seed_value, seed_kind, out_value, out_kind)
         cot: dict[int, tuple] = {id(self.root): (seed_value, seed_kind)}
+        released = 0
         for node in reversed(self.order):
-            entry = cot.get(id(node))
+            key = id(node)
+            if isinstance(node, ir.DiffVar):
+                # DiffVar cotangents are read out after the loop (grads
+                # below); they survive the pass. Everything else is
+                # released once propagated: reverse-topological order
+                # guarantees all consumers already accumulated into it,
+                # so deletion is observably identical to retention.
+                entry = cot.get(key)
+                if entry is None:
+                    continue
+                _propagate(node, entry[0], entry[1], self, cot)
+                continue
+            entry = cot.pop(key, None)
             if entry is None:
                 continue
             _propagate(node, entry[0], entry[1], self, cot)
+            released += 1
+        self.last_released_cotangents = released
         grads = []
         for key in self.wrt_keys:
             dnode = self.diffvars.get(key)
@@ -913,6 +931,8 @@ def _rev_reduce(node: ir.Reduce, cot_value, cot_kind: str, val, acc) -> None:
         raise _diff_error("grouped reduction",
                           "grouping is discrete; aggregate outside "
                           "differentiable graphs")
+    from ..core.expression import resolve_axes
+
     operand, okind = val(node.operand)
     op = node.op
     if okind == "scalar":
@@ -920,10 +940,17 @@ def _rev_reduce(node: ir.Reduce, cot_value, cot_kind: str, val, acc) -> None:
         okind = "dense"
     if okind == "dense":
         X = _f64(operand, op)
-        c = _scalar_cot(cot_value, cot_kind, op)
-        acc(node.operand, _reduce_rev(op, X, c))
+        axes = resolve_axes(node.axis, X.ndim, op, X.shape)
+        c = _shaped_cot(cot_value, cot_kind, op, X.shape, axes,
+                        node.keepdims)
+        acc(node.operand, _reduce_rev_axis(op, X, c, axes))
         return
     if okind == "series":
+        if node.keepdims:
+            raise _diff_error(
+                f"reduction '{op}'",
+                "keepdims has no series result form; collect() to dense "
+                "first for shaped reductions")
         if operand.dtype not in (pl.Float32, pl.Float64):
             raise _diff_error(f"reduction '{op}'",
                               "non-floating series have no derivatives")
@@ -933,6 +960,11 @@ def _rev_reduce(node: ir.Reduce, cot_value, cot_kind: str, val, acc) -> None:
             pl.Series(operand.name, _reduce_rev(op, X, c).tolist()), "series")
         return
     _check_all_float_frame(operand, f"reduction '{op}'")
+    if node.axis is not None:
+        raise _diff_error(
+            f"reduction '{op}'",
+            "axis reductions over frames are ambiguous (rows vs fields); "
+            "reduce fields explicitly or collect() to dense first")
     C = _frame_cot(cot_value, cot_kind, operand)
     if C.shape[0] != 1:
         raise TLDiffError(f"reduction '{op}' output must be one row")
@@ -943,25 +975,70 @@ def _rev_reduce(node: ir.Reduce, cot_value, cot_kind: str, val, acc) -> None:
     acc(node.operand, _wrap_frame(out, operand), "frame")
 
 
+def _shaped_cot(cot_value, cot_kind: str, op: str, shape: tuple,
+                axes: tuple, keepdims: bool) -> np.ndarray:
+    """Broadcast an axis-reduction cotangent back to the input shape."""
+    c = np.asarray(_f64(cot_value, f"{op} cotangent"), dtype=np.float64)
+    if keepdims:
+        try:
+            return np.broadcast_to(c, shape).copy()
+        except ValueError:
+            pass
+    else:
+        full = list(c.shape)
+        for ax in axes:
+            full.insert(ax, 1)
+        try:
+            c = np.asarray(c).reshape(full)
+            return np.broadcast_to(c, shape).copy()
+        except ValueError:
+            pass
+    raise TLDiffError(f"reduction '{op}' cotangent shape {c.shape} "
+                      f"incompatible with input shape {list(shape)}",
+                      code="TL0807",
+                      details={"cotangent": str(c.shape),
+                               "shape": [int(d) for d in shape]})
+
+
 def _reduce_rev(op: str, X: np.ndarray, c: float) -> np.ndarray:
-    n = X.size
+    """Legacy whole-array rule (series/frame paths); axis-aware callers
+    use :func:`_reduce_rev_axis` directly."""
+    axes = tuple(range(X.ndim))
+    return _reduce_rev_axis(op, X, np.full(X.shape, c), axes)
+
+
+def _reduce_rev_axis(op: str, X: np.ndarray, c: np.ndarray,
+                     axes: tuple) -> np.ndarray:
+    """Axis-aware reverse rule; cotangent ``c`` already matches X.shape."""
+    n = 1
+    for ax in axes:
+        n *= X.shape[ax]
     if op == "sum":
-        return np.full(X.shape, c)
+        return c.copy()
     if op == "mean":
-        return np.full(X.shape, c / n)
+        return np.full(X.shape, 0.0) + c / n
     if op in ("min", "max"):
-        m = X.min() if op == "min" else X.max()
+        m = X.min(axis=axes, keepdims=True) if op == "min" else X.max(
+            axis=axes, keepdims=True)
         mask = X == m
-        return np.where(mask, c / max(int(mask.sum()), 1), 0.0)
+        # Ties split the seed within each output element (established
+        # whole-array convention, applied per reduced slice).
+        counts = np.maximum(mask.sum(axis=axes, keepdims=True), 1)
+        return np.where(mask, c / counts, 0.0)
     if op == "var":
-        return np.full(X.shape, 0.0) if n == 0 else (c * 2.0 * (X - X.mean()) / n)
+        if n == 0:
+            return np.full(X.shape, 0.0)
+        mu = X.mean(axis=axes, keepdims=True)
+        return c * 2.0 * (X - mu) / n
     if op == "std":
         if n == 0:
             return np.full(X.shape, 0.0)
-        sd = X.std()
-        if sd == 0.0:
-            return np.zeros(X.shape)  # constant input: zero subgradient
-        return c * (X - X.mean()) / (n * sd)
+        mu = X.mean(axis=axes, keepdims=True)
+        sd = X.std(axis=axes, keepdims=True)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = c * (X - mu) / (n * sd)
+        # Constant slices: zero subgradient (established convention).
+        return np.where(sd == 0.0, np.zeros(X.shape), out)
     raise _diff_error(f"reduction '{op}'", "not differentiable")  # pragma: no cover
 
 
@@ -1221,7 +1298,8 @@ class _NestedReverse:
         from ..runtime.executor import trace_evaluate
 
         sub_root = ir.substitute(self.op.root, self.env)
-        _, cache = trace_evaluate(sub_root)
+        # Keep-forever: values are read throughout the nested reverse.
+        _, cache = trace_evaluate(sub_root, release=False)
         values = {key: entry[1] for key, entry in cache.items()}
         order = _postorder(sub_root)
         cot: dict[int, tuple] = {id(sub_root): (seed_value, seed_kind)}

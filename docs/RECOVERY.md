@@ -1,4 +1,4 @@
-# TensorLang v0.5 persistent-storage and recovery guide
+# TensorLang v0.6 persistent-storage and recovery guide
 
 ## Guarantee table
 

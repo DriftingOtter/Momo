@@ -143,10 +143,83 @@ class Reduce(Expr):
     op: str
     operand: Expr
     by: Optional[Expr] = None
+    axis: object = None
+    keepdims: bool = False
 
     def __post_init__(self) -> None:
         if self.op not in REDUCTIONS:
             raise ValueError(f"unknown reduction {self.op!r}")
+        object.__setattr__(self, "axis", _normalize_axis(self.axis))
+        if not isinstance(self.keepdims, bool):
+            raise TLTypeError(
+                f"reduction keepdims must be bool, got {self.keepdims!r}",
+                code="TL0511",
+                details={"op": self.op, "keepdims": repr(self.keepdims)})
+
+
+def _normalize_axis(axis) -> tuple | None:
+    """Validate axis *types* (not rank); rank checks need input shape."""
+    import operator as _operator
+
+    from .errors import TLTypeError as _TLTypeError
+
+    def _bad() -> _TLTypeError:
+        return _TLTypeError(f"reduction axis must be int or tuple of ints, "
+                            f"got {axis!r}", code="TL0511",
+                            details={"axis": repr(axis)})
+
+    if axis is None:
+        return None
+    if isinstance(axis, bool):
+        raise _bad()
+    if isinstance(axis, (tuple, list)):
+        items = list(axis)
+    else:
+        items = [axis]
+    out = []
+    for ax in items:
+        if isinstance(ax, bool):
+            raise _bad()
+        try:
+            out.append(_operator.index(ax))
+        except TypeError:
+            raise _bad() from None
+    return tuple(out)
+
+
+def resolve_axes(axis: tuple | None, ndim: int, op: str,
+                 shape: tuple) -> tuple:
+    """Normalize axes against rank (negative wrap, duplicate/empty drop).
+
+    Returns canonical sorted axes. Raises TL0511 (op, axes, rank, shape)
+    for out-of-range entries.
+    """
+    from .errors import TLShapeError as _TLShapeError
+
+    if axis is None:
+        return tuple(range(ndim))
+    if len(axis) == 0:
+        return ()  # NumPy: axis=() reduces nothing, even on rank-0 input
+    if ndim == 0:
+        raise _TLShapeError(
+            f"reduction '{op}' over axes {list(axis)} of rank-0 input "
+            f"(shape {list(shape)}): no axes to reduce",
+            code="TL0511",
+            details={"op": op, "axes": list(axis), "rank": ndim,
+                     "shape": list(shape)})
+    resolved = []
+    for ax in axis:
+        norm = ax + ndim if ax < 0 else ax
+        if norm < 0 or norm >= ndim:
+            raise _TLShapeError(
+                f"reduction '{op}' axis {ax} out of range for rank {ndim} "
+                f"(shape {list(shape)})",
+                code="TL0511",
+                details={"op": op, "axes": list(axis), "rank": ndim,
+                         "shape": list(shape)})
+        if norm not in resolved:
+            resolved.append(norm)
+    return tuple(sorted(resolved))
 
 
 @dataclass(frozen=True)
@@ -510,86 +583,156 @@ def iter_params(node: Expr) -> set[tuple[str, str]]:
 
 
 def remap_params(node: Expr, owner: str) -> Expr:
-    """Rebuild ``node`` with every ``Param`` rebound to ``owner`` (by name)."""
+    """Rebuild ``node`` with every ``Param`` rebound to ``owner`` (by name).
+
+    Sharing-preserving (v0.6 M1): subtrees needing no rebinding are
+    returned as-is (no copy), and repeated references within one call map
+    to a single copy. Output is structurally identical to a full rebuild,
+    so parameter-identity semantics are unchanged while downstream
+    evaluation memoizes shared nodes instead of recomputing them.
+    """
+    memo: dict[int, Expr] = {}
 
     def visit(n: Expr) -> Expr:
         if isinstance(n, Param):
-            return Param(owner, n.name)
+            return n if n.owner == owner else Param(owner, n.name)
         if isinstance(n, DiffVar):
-            return DiffVar(owner, n.name, n.value)
+            return n if n.owner == owner else DiffVar(owner, n.name, n.value)
+        key = id(n)
+        hit = memo.get(key)
+        if hit is not None:
+            return hit
+        out = _remap_rebuild(n)
+        memo[key] = out
+        return out
+
+    def _same(items: tuple) -> bool:
+        return all(new is old for new, old in items)
+
+    def _remap_rebuild(n: Expr) -> Expr:
         if isinstance(n, BinOp):
-            return BinOp(n.op, visit(n.left), visit(n.right))
+            left, right = visit(n.left), visit(n.right)
+            return n if left is n.left and right is n.right else BinOp(
+                n.op, left, right)
         if isinstance(n, UnOp):
-            return UnOp(n.op, visit(n.operand))
+            operand = visit(n.operand)
+            return n if operand is n.operand else UnOp(n.op, operand)
         if isinstance(n, FuncCall):
-            return FuncCall(n.func, tuple(visit(a) for a in n.args))
+            args = tuple(visit(a) for a in n.args)
+            return n if _same(zip(args, n.args)) else FuncCall(n.func, args)
         if isinstance(n, FillNull):
-            return FillNull(visit(n.operand), visit(n.value))
+            operand, value = visit(n.operand), visit(n.value)
+            return (n if operand is n.operand and value is n.value
+                    else FillNull(operand, value))
         if isinstance(n, FieldAccess):
-            return FieldAccess(visit(n.obj), n.field)
+            obj = visit(n.obj)
+            return n if obj is n.obj else FieldAccess(obj, n.field)
         if isinstance(n, GetItem):
-            return GetItem(visit(n.obj), visit(n.index))
+            obj, index = visit(n.obj), visit(n.index)
+            return (n if obj is n.obj and index is n.index
+                    else GetItem(obj, index))
         if isinstance(n, Transpose):
-            return Transpose(visit(n.obj))
+            obj = visit(n.obj)
+            return n if obj is n.obj else Transpose(obj)
         if isinstance(n, Reshape):
-            return Reshape(visit(n.obj), n.shape)
+            obj = visit(n.obj)
+            return n if obj is n.obj else Reshape(obj, n.shape)
         if isinstance(n, Flatten):
-            return Flatten(visit(n.obj))
+            obj = visit(n.obj)
+            return n if obj is n.obj else Flatten(obj)
         if isinstance(n, Concat):
-            return Concat(tuple(visit(p) for p in n.parts), n.axis)
+            parts = tuple(visit(p) for p in n.parts)
+            return n if _same(zip(parts, n.parts)) else Concat(parts, n.axis)
         if isinstance(n, Stack):
-            return Stack(tuple(visit(p) for p in n.parts), n.axis)
+            parts = tuple(visit(p) for p in n.parts)
+            return n if _same(zip(parts, n.parts)) else Stack(parts, n.axis)
         if isinstance(n, Reduce):
-            return Reduce(n.op, visit(n.operand),
-                          visit(n.by) if n.by is not None else None)
+            operand = visit(n.operand)
+            by = visit(n.by) if n.by is not None else None
+            return (n if operand is n.operand and by is n.by
+                    else Reduce(n.op, operand, by, n.axis, n.keepdims))
         if isinstance(n, ApplyOp):
             # Embedded operators keep their own independent scopes.
-            return ApplyOp(n.operator, tuple(visit(a) for a in n.args))
+            args = tuple(visit(a) for a in n.args)
+            return (n if _same(zip(args, n.args))
+                    else ApplyOp(n.operator, args))
         if isinstance(n, Scan):
             return n
         if isinstance(n, Chunked):
             return n
         if isinstance(n, WithField):
-            return WithField(visit(n.obj), n.name, visit(n.value))
+            obj, value = visit(n.obj), visit(n.value)
+            return (n if obj is n.obj and value is n.value
+                    else WithField(obj, n.name, value))
         if isinstance(n, Join):
-            return Join(visit(n.left), visit(n.right), n.on, n.how, n.suffix)
+            left, right = visit(n.left), visit(n.right)
+            return (n if left is n.left and right is n.right
+                    else Join(left, right, n.on, n.how, n.suffix))
         if isinstance(n, SortBy):
-            return SortBy(visit(n.obj), n.keys, n.descending)
+            obj = visit(n.obj)
+            return (n if obj is n.obj
+                    else SortBy(obj, n.keys, n.descending))
         if isinstance(n, Unique):
-            return Unique(visit(n.obj))
+            obj = visit(n.obj)
+            return n if obj is n.obj else Unique(obj)
         if isinstance(n, Where):
-            return Where(visit(n.cond), visit(n.a), visit(n.b))
+            cond, a, b = visit(n.cond), visit(n.a), visit(n.b)
+            return (n if cond is n.cond and a is n.a and b is n.b
+                    else Where(cond, a, b))
         if isinstance(n, Clip):
-            return Clip(visit(n.obj), visit(n.lo), visit(n.hi))
+            obj, lo, hi = visit(n.obj), visit(n.lo), visit(n.hi)
+            return (n if obj is n.obj and lo is n.lo and hi is n.hi
+                    else Clip(obj, lo, hi))
         if isinstance(n, Over):
-            return Over(n.op, visit(n.operand),
-                        visit(n.by) if n.by is not None else None)
+            operand = visit(n.operand)
+            by = visit(n.by) if n.by is not None else None
+            return (n if operand is n.operand and by is n.by
+                    else Over(n.op, operand, by))
         if isinstance(n, Rolling):
-            return Rolling(visit(n.operand), n.window, n.op, n.min_periods)
+            operand = visit(n.operand)
+            return (n if operand is n.operand
+                    else Rolling(operand, n.window, n.op, n.min_periods))
         if isinstance(n, FittedTransform):
-            return FittedTransform(n.kind, n.config, n.state, visit(n.arg))
+            arg = visit(n.arg)
+            return (n if arg is n.arg
+                    else FittedTransform(n.kind, n.config, n.state, arg))
         if isinstance(n, (SvdPart, EighPart)):
             return n
         if isinstance(n, Solve):
-            return Solve(visit(n.a), visit(n.b))
+            a, b = visit(n.a), visit(n.b)
+            return n if a is n.a and b is n.b else Solve(a, b)
         if isinstance(n, Norm):
-            return Norm(visit(n.obj), n.ord, n.axis)
+            obj = visit(n.obj)
+            return (n if obj is n.obj
+                    else Norm(obj, n.ord, n.axis))
         if isinstance(n, Cov):
-            return Cov(visit(n.obj), n.rowvar)
+            obj = visit(n.obj)
+            return n if obj is n.obj else Cov(obj, n.rowvar)
         if isinstance(n, Corr):
-            return Corr(visit(n.obj), n.rowvar)
+            obj = visit(n.obj)
+            return n if obj is n.obj else Corr(obj, n.rowvar)
         if isinstance(n, Quantile):
-            return Quantile(visit(n.obj), n.q)
+            obj = visit(n.obj)
+            return n if obj is n.obj else Quantile(obj, n.q)
         if isinstance(n, Einsum):
-            return Einsum(n.spec, tuple(visit(p) for p in n.parts))
+            parts = tuple(visit(p) for p in n.parts)
+            return (n if _same(zip(parts, n.parts))
+                    else Einsum(n.spec, parts))
         if isinstance(n, Tensordot):
-            return Tensordot(visit(n.a), visit(n.b), n.axes)
+            a, b = visit(n.a), visit(n.b)
+            return (n if a is n.a and b is n.b
+                    else Tensordot(a, b, n.axes))
         if isinstance(n, MoveAxis):
-            return MoveAxis(visit(n.obj), n.source, n.destination)
+            obj = visit(n.obj)
+            return (n if obj is n.obj
+                    else MoveAxis(obj, n.source, n.destination))
         if isinstance(n, OneHot):
-            return OneHot(visit(n.obj), n.categories)
+            obj = visit(n.obj)
+            return n if obj is n.obj else OneHot(obj, n.categories)
         if isinstance(n, Polynomial):
-            return Polynomial(visit(n.obj), n.degree, n.include_bias)
+            obj = visit(n.obj)
+            return (n if obj is n.obj
+                    else Polynomial(obj, n.degree, n.include_bias))
         return n
 
     return visit(node)
@@ -628,7 +771,8 @@ def substitute(node: Expr, env: dict[tuple[str, str], Expr]) -> Expr:
             return Stack(tuple(visit(p) for p in n.parts), n.axis)
         if isinstance(n, Reduce):
             return Reduce(n.op, visit(n.operand),
-                          visit(n.by) if n.by is not None else None)
+                          visit(n.by) if n.by is not None else None,
+                          n.axis, n.keepdims)
         if isinstance(n, ApplyOp):
             return ApplyOp(n.operator, tuple(visit(a) for a in n.args))
         if isinstance(n, Scan):

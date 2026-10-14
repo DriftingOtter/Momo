@@ -175,6 +175,9 @@ _reg("TL0509", "TLShapeError", "feature width mismatch on apply",
      "Application data must have the fitted feature count (frames align by name).")
 _reg("TL0510", "TLShapeError", "join execution failed",
      "Check key dtypes and join compatibility.")
+_reg("TL0511", "TLShapeError", "invalid reduction axis",
+     "Use axis=None, an in-range axis, or a tuple of in-range axes; "
+     "keepdims must be bool.")
 _reg("TL0601", "TLMutationError", "inplace without a mutable target",
      "Use f(tensor).inplace() with a single-input operator over a Tensor.")
 _reg("TL0602", "TLMutationError", "inplace into a lazy scan",

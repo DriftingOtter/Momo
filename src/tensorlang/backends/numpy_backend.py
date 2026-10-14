@@ -118,7 +118,10 @@ def apply_math_func(func: str, arg):
         raise TLTypeError(f"unknown math function '{func}'") from None
 
 
-def apply_reduce(op: str, arr: np.ndarray):
+def apply_reduce(op: str, arr: np.ndarray, axes: tuple | None = None,
+                 keepdims: bool = False):
+    """NumPy reduction over ``axes`` (None = all axes). Empty-axis and
+    zero-size semantics pass straight through to NumPy."""
     table = {
         "sum": np.sum, "mean": np.mean, "min": np.min,
         "max": np.max, "std": np.std, "var": np.var,
@@ -127,7 +130,11 @@ def apply_reduce(op: str, arr: np.ndarray):
         fn = table[op]
     except KeyError:
         raise TLTypeError(f"unknown reduction '{op}'") from None
-    return fn(arr)
+    if axes is None:
+        return fn(arr)
+    # Empty and partial axis tuples go straight to NumPy, preserving
+    # per-op conventions (e.g. var/std over () yield zeros, not input).
+    return fn(arr, axis=tuple(axes), keepdims=keepdims)
 
 
 def matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:

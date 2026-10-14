@@ -10,26 +10,63 @@ from ..core import expression as ir
 from ..core.errors import TLShapeError, TLTypeError
 
 
-def apply(op: str, value, kind: str, by, evaluate):
+def apply(op: str, value, kind: str, by, evaluate, axis=None,
+            keepdims: bool = False):
     """Evaluate a reduction. Returns ``(value, kind)``.
 
-    - dense: NumPy reduction to a scalar (``by`` rejected).
-    - series: scalar.
+    - dense: NumPy reduction (``axis``/``keepdims`` per NumPy; ``by``
+      rejected; scalar kind only for rank-0 results without keepdims).
+    - series: scalar (``axis`` restricted to None/0/-1, ``keepdims``
+      rejected).
     - frame: one-row frame over applicable numerical fields, or a grouped
-      frame when ``by`` is given (field name, series, or per-row keys).
+      frame when ``by`` is given (``axis`` rejected as ambiguous).
     """
     if kind == "dense":
         if by is not None:
+            if axis is not None:
+                raise TLTypeError(
+                    f"reduction '{op}' cannot combine grouped 'by' with "
+                    f"'axis'; use one or the other",
+                    code="TL0511",
+                    details={"op": op, "axis": repr(axis)})
             raise TLTypeError(
                 f"grouped reduction '{op}' is only defined for structured tensors"
             )
-        return _np_be.apply_reduce(op, np.asarray(value)), "scalar"
+        arr = np.asarray(value)
+        axes = ir.resolve_axes(axis, arr.ndim, op, arr.shape)
+        out = _np_be.apply_reduce(op, arr, axes, keepdims)
+        if isinstance(out, np.ndarray) and out.ndim == 0 and not keepdims:
+            return out, "scalar"
+        return out, "dense"
     if kind == "series":
         if by is None:
+            if keepdims:
+                raise TLTypeError(
+                    f"reduction '{op}' keepdims has no series result form; "
+                    f"collect() to dense first for shaped reductions",
+                    code="TL0511",
+                    details={"op": op, "keepdims": True})
+            if axis is not None and tuple(axis) not in ((),):
+                # Rank-1 validation only (axis 0/-1); anything valid here
+                # reduces the whole series, matching NumPy semantics.
+                ir.resolve_axes(axis, 1, op, (len(value),))
             return _series_reduce(op, value), "scalar"
+        if axis is not None:
+            raise TLTypeError(
+                f"reduction '{op}' cannot combine grouped 'by' with 'axis'; "
+                f"use one or the other",
+                code="TL0511",
+                details={"op": op, "axis": repr(axis)})
         key = _resolve_series_key(by, value, evaluate)
         return _pl_be.grouped_series(op, value, key), "frame"
     if kind == "frame":
+        if axis is not None:
+            raise TLTypeError(
+                f"reduction '{op}' axis={list(axis)} is ambiguous for "
+                f"structured frames (rows vs fields); reduce fields "
+                f"explicitly or collect() to dense first",
+                code="TL0511",
+                details={"op": op, "axes": list(axis)})
         key = _resolve_by(by, value, evaluate)
         out = _pl_be.apply_reduce(op, value, key)
         if isinstance(out, pl.DataFrame):
@@ -38,9 +75,12 @@ def apply(op: str, value, kind: str, by, evaluate):
     if kind == "scalar":
         if by is not None:
             raise TLTypeError("cannot group a scalar reduction")
-        if op == "sum":
+        if axis is not None:
+            ir.resolve_axes(axis, 0, op, ())
+        if op == "sum" and axis is None:
             return value, "scalar"
-        return _np_be.apply_reduce(op, np.asarray(value)), "scalar"
+        return _np_be.apply_reduce(op, np.asarray(value), (), keepdims), \
+            "scalar"
     raise TLTypeError(f"unsupported reduction operand")  # pragma: no cover
 
 

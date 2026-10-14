@@ -145,7 +145,8 @@ class Operator:
     def __invert__(self): return self._unary("not")
     def __abs__(self): return self._unary("abs")
 
-    def _reduce(self, op: str, by=None) -> "Operator":
+    def _reduce(self, op: str, by=None, *, axis=None,
+                keepdims: bool = False) -> "Operator":
         uid = fresh_uid()
         root = ir.remap_params(self.root, uid)
         if by is None:
@@ -163,26 +164,33 @@ class Operator:
             raise TLTypeError(
                 f"group key must be a field name or operator, got "
                 f"{type(by).__name__}")
-        return Operator(self.params, ir.Reduce(op, root, by_node), uid)
+        if by is not None and axis is not None:
+            raise TLTypeError(
+                f"reduction '{op}' cannot combine grouped 'by' with 'axis'; "
+                f"use one or the other",
+                code="TL0511",
+                details={"op": op, "axis": repr(axis)})
+        return Operator(self.params, ir.Reduce(op, root, by_node,
+                                               axis, keepdims), uid)
 
-    def sum(self, by=None) -> "Operator":
+    def sum(self, by=None, *, axis=None, keepdims=False) -> "Operator":
         """Reduction over the operator expression (e.g. loss means)."""
-        return self._reduce("sum", by)
+        return self._reduce("sum", by, axis=axis, keepdims=keepdims)
 
-    def mean(self, by=None) -> "Operator":
-        return self._reduce("mean", by)
+    def mean(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("mean", by, axis=axis, keepdims=keepdims)
 
-    def min(self, by=None) -> "Operator":
-        return self._reduce("min", by)
+    def min(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("min", by, axis=axis, keepdims=keepdims)
 
-    def max(self, by=None) -> "Operator":
-        return self._reduce("max", by)
+    def max(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("max", by, axis=axis, keepdims=keepdims)
 
-    def std(self, by=None) -> "Operator":
-        return self._reduce("std", by)
+    def std(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("std", by, axis=axis, keepdims=keepdims)
 
-    def var(self, by=None) -> "Operator":
-        return self._reduce("var", by)
+    def var(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("var", by, axis=axis, keepdims=keepdims)
 
     __hash__ = None  # type: ignore[assignment]
 
@@ -197,6 +205,13 @@ class Operator:
         # misses, so real methods/properties always win.
         if name.startswith("_"):
             raise AttributeError(name)
+        if name == "T":
+            # Matrix transpose ({X}.T): an operator, not a field lookup.
+            # A structured field literally named "T" remains accessible
+            # via explicit string indexing (X["T"]).
+            from ..operators.linear_algebra import transpose as _transpose
+
+            return _transpose(self)
         uid = fresh_uid()
         root = ir.remap_params(self.root, uid)
         return Operator(self.params, ir.FieldAccess(root, name), uid)

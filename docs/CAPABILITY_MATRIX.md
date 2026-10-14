@@ -1,11 +1,12 @@
-# TensorLang v0.5 capability matrix
+# TensorLang v0.6 capability matrix
 
 How to read this table: **in-memory** execution supports everything the
 operator library defines. The **chunked** column lists what the
 out-of-core (Zarr/Dask) path lowers without full materialization.
 Anything else over chunked sources raises a coded diagnostic (`TL1001`,
 `TL1002`/`TL1003` for storage conflicts, `TL1010`–`TL1013`,
-`TL1020`–`TL1024`, `TL1030`–`TL1035`) instead of
+`TL1020`–`TL1024`, `TL1030`–`TL1035`; shape errors such as `TL0511`
+invalid axes propagate unwrapped) instead of
 silently materializing. Collect the inputs explicitly to use the full
 in-memory library.
 
@@ -22,10 +23,12 @@ union subdivision (sides only split, never shuffle).
 `flatten`, `concat`/`stack` with aligned non-axis chunks, integer/slice
 indexing. Unsafe chunk-merging reshapes are rejected (`TL1010`).
 
-## Reductions — chunked: whole-array only
+## Reductions — chunked: whole-array and axis-aware
 
-`sum mean min max std var` over the whole array (tree-combined).
-Grouped reductions (`by=`) require materialization (`TL1013`).
+`sum mean min max std var` over all axes or selected `axis=` (tuples,
+negative axes, `keepdims`), tree-combined per axis with partial-buffer
+estimates in the plan. Grouped reductions (`by=`) require
+materialization (`TL1013`); `by=`+`axis` is rejected (`TL1001`).
 
 ## Contractions — chunked: bounded matmul only
 

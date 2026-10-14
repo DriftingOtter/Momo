@@ -48,6 +48,7 @@ M4 reliability); `x99` in each range is the generic class fallback.
 | `TL0508` | TLShapeError | invalid PCA request | Need n_components <= min(n_samples, n_features) and >= 2 samples. |
 | `TL0509` | TLShapeError | feature width mismatch on apply | Application data must have the fitted feature count (frames align by name). |
 | `TL0510` | TLShapeError | join execution failed | Check key dtypes and join compatibility. |
+| `TL0511` | TLShapeError | invalid reduction axis | Use axis=None, an in-range axis, or a tuple of in-range axes; keepdims must be bool. |
 | `TL0599` | TLShapeError | unspecified shape error | Generic shape failure; see the message. |
 | `TL0601` | TLMutationError | inplace without a mutable target | Use f(tensor).inplace() with a single-input operator over a Tensor. |
 | `TL0602` | TLMutationError | inplace into a lazy scan | Scans are immutable descriptors; collect() into a tensor first. |

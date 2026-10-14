@@ -111,23 +111,23 @@ def test_write_zarr_roundtrip_and_overwrite(store, tmp_path):
 
 
 def test_unsupported_chunked_ops(store):
-    path, _ = store
-    data = T.scan_zarr(path)
+    path, data = store
+    chunked = T.scan_zarr(path)
     X = P("X")
-    with pytest.raises(TLUnsupportedError) as exc:
-        (X @ X.T)(data).collect()
-    assert exc.value.code == "TL1001"
+    # Bounded matmul composes with operator transpose: (400,6) @ (6,400)
+    # has an unchunked contract axis, so it executes out-of-core (M2).
+    assert np.allclose((X @ X.T)(chunked).collect(), data @ data.T)
     with pytest.raises(TLUnsupportedError):
-        data.sort().collect()
+        chunked.sort().collect()
     with pytest.raises(TLUnsupportedError):
         from tensorlang import standardize
-        standardize().fit(data)
+        standardize().fit(chunked)
     with pytest.raises(TLDiffError) as exc:
         from tensorlang import grad
-        grad((X**2).sum())(data).collect()
+        grad((X**2).sum())(chunked).collect()
     assert exc.value.code == "TL0809"
     with pytest.raises(TLMutationError):
-        (P("Q") + 1)(data).inplace()
+        (P("Q") + 1)(chunked).inplace()
 
 
 def test_inplace_into_chunked_rejected(store):

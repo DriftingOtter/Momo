@@ -1,5 +1,19 @@
 # TensorLang changelog
 
+## v0.6.0 — workload-driven numerics and natural tensor ops (RC)
+
+- Dense execution: sharing-preserving parameter remapping, scoped
+  evaluation memo with use-count eviction, structural deduplication
+  with taint isolation (no language or semantics changes).
+- Reverse-mode AD: pop-after-propagate cotangent release with
+  complete forward tapes; `last_released_cotangents` introspection.
+- Axis-aware reductions (`axis=`/`keepdims`) across Tensor/Lazy/
+  Operator, executor, AD rules, and chunked lowering; `TL0511`.
+- Operator `.T` transpose; field-confusion diagnostics suggest the
+  operator function (`X["T"]` preserved for fields).
+- F8 source-baseline fix included (as released in v0.5.4).
+- 428 tests; benchmarks at native parity or better on ML/energy.
+
 ## v0.5.3 — out-of-core chunked execution
 
 Chunking is a physical execution property, not a new operator kind:

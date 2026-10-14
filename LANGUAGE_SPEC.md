@@ -1,4 +1,4 @@
-# TensorLang Language Specification — v0.5.3
+# TensorLang Language Specification — v0.6.0
 
 This document defines TensorLang independently of its backing libraries
 (NumPy, Polars, SymPy, SciPy). Implementations must honor the observable
@@ -116,6 +116,15 @@ reject `.inplace()` with a descriptive error.
   field lists. Heterogeneous frames **must not** be implicitly converted
   to homogeneous arrays. Conversions (`to_numpy`, `to_polars`) are explicit
   and **must** reject genuinely undefined cases.
+- Reductions (`sum mean min max std var`) accept `axis=` (None, int,
+  negative int, or tuple) and `keepdims=` with NumPy shape semantics;
+  invalid axes report `TL0511` with operator, axes, rank, and shape.
+  `axis=` over frames is rejected as ambiguous; over series it is
+  restricted to full reductions.
+- Transpose: `.T` works on operators (`{X}.T`), dense tensors, and lazy
+  values; a structured field literally named `"T"` stays reachable via
+  explicit string indexing (`X["T"]`). Transposing heterogeneous frames
+  is rejected (`TL0901`).
 - Dense snapshots are zero-copy read-only views; external arrays are
   copied once at the graph boundary. Frames use cheap clones.
 
@@ -196,8 +205,14 @@ plus the physical plan or fallback reason without executing; `profile()`
 reports measured time, memory, backend, and shape — never estimates.
 For gradient graphs, `profile()` additionally reports measured forward
 and backward phase times. Fitting and I/O are explicit execution
-boundaries. Multi-output nodes share one computation. Dense evaluation is
-node-by-node (one temporary per operator); no loop fusion is assumed.
+boundaries. Multi-output nodes share one computation. Dense evaluation
+memoizes shared subgraphs within one boundary execution (structurally
+identical subtrees evaluate once) and releases entries at last use;
+nested gradient control nodes and scans always evaluate directly, so
+snapshot, scan-count, and tape semantics are unchanged. Reverse-mode
+releases each cotangent after propagation (readout entries survive);
+forward values stay pinned for repeated application. No loop fusion is
+assumed.
 
 ## 14. Automatic differentiation (v0.4)
 
@@ -215,7 +230,9 @@ multi-parameter `wrt` returns gradients in order.
   categorical inputs are rejected, never silently converted.
 - Supported rules: elementwise arithmetic with broadcast reduction of
   adjoints, negation, abs (0 at 0), sin/cos/tan/exp/log/sqrt,
-  sum/mean/min/max/std/var (ties split evenly; zero-variance std gives 0),
+  sum/mean/min/max/std/var over all or selected axes (axis cotangents
+  broadcast back; ties split evenly within each output element;
+  zero-variance std gives 0),
   matmul (1-D/2-D/batched), transpose/reshape/flatten, concat/stack/
   moveaxis, indexing with scatter (slices, integers, masks), where/clip/
   fill_null branch masks, linear solves (implicit), the vector 2-norm,
@@ -260,10 +277,11 @@ Chunking is a physical execution property, not a new operator kind.
 dtype, chunk shape, partition count, byte counts) is inspected, lazily.
 Operators observe one logical tensor regardless of partitioning.
 
-Supported over chunks in M1: elementwise arithmetic/comparisons, the six
+Supported over chunks: elementwise arithmetic/comparisons, the six
 elementary functions, where/clip, null masks, transpose/reshape/flatten,
-concat/stack, integer/slice indexing, and whole-array reductions
-(tree-combined, bounded memory). Anything else raises `TL1001` naming the
+concat/stack, integer/slice indexing, whole-array reductions, and
+axis/keepdims reductions (tree-combined per axis, bounded memory).
+Anything else raises `TL1001` naming the
 operation instead of silently materializing. `write_zarr(path)` streams
 chunk-by-chunk (`TL1002` unless `overwrite=True`); `inplace()` into
 chunked sources is rejected; fitting and differentiation over chunked
