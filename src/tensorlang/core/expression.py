@@ -20,7 +20,7 @@ BINOPS = frozenset({
 })
 UNOPS = frozenset({"neg", "not", "abs"})
 MATH_FUNCS = frozenset({"sin", "cos", "tan", "exp", "log", "sqrt"})
-REDUCTIONS = frozenset({"sum", "mean", "min", "max", "std", "var"})
+REDUCTIONS = frozenset({"sum", "mean", "min", "max", "std", "var", "count"})
 
 
 @dataclass(frozen=True)
@@ -265,12 +265,50 @@ class WithField(Expr):
 @dataclass(frozen=True)
 class Join(Expr):
     """Relational join with explicit keys (``how`` one of JOIN_HOW)."""
-
     left: Expr
     right: Expr
     on: tuple[str, ...]
     how: str = "inner"
     suffix: str = "_right"
+
+
+@dataclass(frozen=True)
+class ToDense(Expr):
+    """Lazy structured-to-dense bridge (v0.7 M1).
+
+    Converts selected frame columns to a dense array WITHOUT executing
+    at construction. ``columns`` is ordered; ``nulls`` is "error" (fail
+    on any null) or "nan" (missing as NaN with documented promotion).
+    Row count stays unknown until execution (relational ops can change
+    cardinality); memory admission happens at the execution boundary.
+    """
+
+    operand: Expr
+    columns: tuple[str, ...] = ()
+    nulls: str = "nan"
+
+    def __post_init__(self) -> None:
+        from .errors import TLTypeError as _TLTypeError
+
+        cols = list(self.columns) if isinstance(
+            self.columns, (tuple, list)) else None
+        if cols is None or not cols or any(
+                not isinstance(c, str) for c in cols):
+            raise _TLTypeError(
+                f"to_dense() needs a non-empty list of column names, got "
+                f"{self.columns!r}",
+                code="TL0418",
+                details={"columns": repr(self.columns)})
+        if len(set(cols)) != len(cols):
+            raise _TLTypeError(
+                f"to_dense() column names must be unique, got {cols!r}",
+                code="TL0418", details={"columns": repr(self.columns)})
+        if self.nulls not in ("error", "nan"):
+            raise _TLTypeError(
+                f"to_dense() nulls policy must be 'error' or 'nan', got "
+                f"{self.nulls!r}",
+                code="TL0418", details={"nulls": repr(self.nulls)})
+        object.__setattr__(self, "columns", tuple(cols))
 
 
 @dataclass(frozen=True)
@@ -531,6 +569,8 @@ def iter_params(node: Expr) -> set[tuple[str, str]]:
         elif isinstance(n, WithField):
             visit(n.obj)
             visit(n.value)
+        elif isinstance(n, ToDense):
+            visit(n.operand)
         elif isinstance(n, Join):
             visit(n.left)
             visit(n.right)
@@ -664,6 +704,10 @@ def remap_params(node: Expr, owner: str) -> Expr:
             obj, value = visit(n.obj), visit(n.value)
             return (n if obj is n.obj and value is n.value
                     else WithField(obj, n.name, value))
+        if isinstance(n, ToDense):
+            operand = visit(n.operand)
+            return (n if operand is n.operand
+                    else ToDense(operand, n.columns, n.nulls))
         if isinstance(n, Join):
             left, right = visit(n.left), visit(n.right)
             return (n if left is n.left and right is n.right
@@ -781,6 +825,8 @@ def substitute(node: Expr, env: dict[tuple[str, str], Expr]) -> Expr:
             return n
         if isinstance(n, WithField):
             return WithField(visit(n.obj), n.name, visit(n.value))
+        if isinstance(n, ToDense):
+            return ToDense(visit(n.operand), n.columns, n.nulls)
         if isinstance(n, Join):
             return Join(visit(n.left), visit(n.right), n.on, n.how, n.suffix)
         if isinstance(n, SortBy):

@@ -192,6 +192,9 @@ class Operator:
     def var(self, by=None, *, axis=None, keepdims=False) -> "Operator":
         return self._reduce("var", by, axis=axis, keepdims=keepdims)
 
+    def count(self, by=None, *, axis=None, keepdims=False) -> "Operator":
+        return self._reduce("count", by, axis=axis, keepdims=keepdims)
+
     __hash__ = None  # type: ignore[assignment]
 
     def __bool__(self) -> bool:

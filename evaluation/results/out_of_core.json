@@ -5,12 +5,12 @@
       "tensorlang": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "        3.08 real         5.32 user         0.83 sys\n           341311488  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               40675  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                3462  messages sent\n                2843  messages received\n                   0  signals received\n                  26  voluntary context switches\n               36458  involuntary context switches\n         36381092266  instructions retired\n         12122139654  cycles elapsed\n           307709008  peak memory footprint\n",
+        "stderr_tail": "        2.20 real         3.64 user         0.73 sys\n           344850432  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               40660  page reclaims\n                 183  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                3463  messages sent\n                2893  messages received\n                   0  signals received\n                 535  voluntary context switches\n               37154  involuntary context switches\n         36421885199  instructions retired\n         12994013977  cycles elapsed\n           310838328  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 0.3357914590014843,
-            "min_s": 0.3256468749968917,
-            "max_s": 0.34278595900104847,
+            "median_s": 0.2507981669914443,
+            "min_s": 0.24025783300749026,
+            "max_s": 0.257814332988346,
             "repeats": 5
           }
         },
@@ -20,18 +20,18 @@
           "outcome": "admitted",
           "workers_used": 4
         },
-        "peak_rss_mb": 341.311488,
+        "peak_rss_mb": 344.850432,
         "peak_rss_source": "time -l"
       },
       "native": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "        2.39 real         4.73 user         0.73 sys\n           275562496  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               35911  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                2790  messages sent\n                2348  messages received\n                   0  signals received\n                  10  voluntary context switches\n               32496  involuntary context switches\n         32804293244  instructions retired\n         10762484654  cycles elapsed\n           254034760  peak memory footprint\n",
+        "stderr_tail": "        1.89 real         3.74 user         0.67 sys\n           272318464  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               35759  page reclaims\n                 131  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                2790  messages sent\n                2317  messages received\n                   0  signals received\n                  77  voluntary context switches\n               31231  involuntary context switches\n         32765061594  instructions retired\n         11045510109  cycles elapsed\n           251282248  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 0.2905580829974497,
-            "min_s": 0.2836218340016785,
-            "max_s": 0.2963481250044424,
+            "median_s": 0.2396352080104407,
+            "min_s": 0.21893983300833497,
+            "max_s": 0.2622232090070611,
             "repeats": 5
           }
         },
@@ -39,7 +39,7 @@
           "mu": 9.99899117173009,
           "sigma": 2.998743978029651
         },
-        "peak_rss_mb": 275.562496,
+        "peak_rss_mb": 272.318464,
         "peak_rss_source": "time -l"
       }
     },
@@ -48,12 +48,12 @@
       "tensorlang": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "       11.60 real        17.33 user         2.51 sys\n           336117760  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              111434  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               11562  messages sent\n               10580  messages received\n                   0  signals received\n                 111  voluntary context switches\n              125942  involuntary context switches\n        121305300336  instructions retired\n         39070902632  cycles elapsed\n           301351992  peak memory footprint\n",
+        "stderr_tail": "       17.64 real        22.57 user         4.32 sys\n           331776000  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              118935  page reclaims\n                  52  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               11561  messages sent\n               10392  messages received\n                   0  signals received\n                 549  voluntary context switches\n              147048  involuntary context switches\n        121923558831  instructions retired\n         49557978289  cycles elapsed\n           301483064  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 1.7449992910042056,
-            "min_s": 1.7374539169977652,
-            "max_s": 1.7923961670021527,
+            "median_s": 2.925358207998215,
+            "min_s": 2.123340416990686,
+            "max_s": 3.860169916995801,
             "repeats": 5
           }
         },
@@ -63,18 +63,18 @@
           "outcome": "admitted",
           "workers_used": 4
         },
-        "peak_rss_mb": 336.11776,
+        "peak_rss_mb": 331.776,
         "peak_rss_source": "time -l"
       },
       "native": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "        6.57 real        16.72 user         2.61 sys\n           277872640  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              106574  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               10890  messages sent\n                9597  messages received\n                   0  signals received\n                   4  voluntary context switches\n              129943  involuntary context switches\n        116562638978  instructions retired\n         38114728319  cycles elapsed\n           256262960  peak memory footprint\n",
+        "stderr_tail": "       21.04 real        25.44 user         6.65 sys\n           277921792  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n              107330  page reclaims\n                 150  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               10890  messages sent\n                8796  messages received\n                   0  signals received\n                 919  voluntary context switches\n              167360  involuntary context switches\n        117424608690  instructions retired\n         65044317582  cycles elapsed\n           257672008  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 0.9817547089987784,
-            "min_s": 0.9729839999999967,
-            "max_s": 0.9904801250013406,
+            "median_s": 3.741951792006148,
+            "min_s": 2.834027958000661,
+            "max_s": 4.217393290993641,
             "repeats": 5
           }
         },
@@ -82,7 +82,7 @@
           "mu": 10.000243283509157,
           "sigma": 2.9997426595669197
         },
-        "peak_rss_mb": 277.87264,
+        "peak_rss_mb": 277.921792,
         "peak_rss_source": "time -l"
       }
     },
@@ -91,12 +91,12 @@
       "tensorlang": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "       22.60 real        26.77 user         4.93 sys\n           169623552  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               15459  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               54762  messages sent\n               51305  messages received\n                   0  signals received\n                  23  voluntary context switches\n              616949  involuntary context switches\n        187745529626  instructions retired\n         62231454572  cycles elapsed\n           135856968  peak memory footprint\n",
+        "stderr_tail": "       46.49 real        42.80 user        11.28 sys\n           166019072  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               15802  page reclaims\n                 663  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               54761  messages sent\n               48895  messages received\n                   0  signals received\n                3495  voluntary context switches\n              715995  involuntary context switches\n        189159632305  instructions retired\n         99761170342  cycles elapsed\n           140477304  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 3.5545059159994707,
-            "min_s": 3.532385874997999,
-            "max_s": 3.6665047499991488,
+            "median_s": 5.3024239579972345,
+            "min_s": 4.9785359160014195,
+            "max_s": 8.275089249989833,
             "repeats": 5
           }
         },
@@ -106,18 +106,18 @@
           "outcome": "admitted",
           "workers_used": 2
         },
-        "peak_rss_mb": 169.623552,
+        "peak_rss_mb": 166.019072,
         "peak_rss_source": "time -l"
       },
       "native": {
         "returncode": 0,
         "stdout_tail": "",
-        "stderr_tail": "       20.78 real        25.43 user         4.66 sys\n            98959360  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               10544  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               54090  messages sent\n               51223  messages received\n                   0  signals received\n                  13  voluntary context switches\n              621824  involuntary context switches\n        176546857643  instructions retired\n         59070096363  cycles elapsed\n            78316096  peak memory footprint\n",
+        "stderr_tail": "       29.46 real        33.44 user         7.11 sys\n           100417536  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               13716  page reclaims\n                 150  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n               54090  messages sent\n               49596  messages received\n                   0  signals received\n                1707  voluntary context switches\n              646414  involuntary context switches\n        176528906006  instructions retired\n         68756756180  cycles elapsed\n            83526208  peak memory footprint\n",
         "phases": {
           "normalize": {
-            "median_s": 3.3494474590042955,
-            "min_s": 3.3359603329954552,
-            "max_s": 3.385738709002908,
+            "median_s": 4.172571624992997,
+            "min_s": 4.126246041996637,
+            "max_s": 4.468991959001869,
             "repeats": 5
           }
         },
@@ -125,7 +125,7 @@
           "mu": 10.000243283509157,
           "sigma": 2.9997426595669197
         },
-        "peak_rss_mb": 98.95936,
+        "peak_rss_mb": 100.417536,
         "peak_rss_source": "time -l"
       }
     }

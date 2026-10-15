@@ -121,7 +121,11 @@ def apply_math_func(func: str, arg):
 def apply_reduce(op: str, arr: np.ndarray, axes: tuple | None = None,
                  keepdims: bool = False):
     """NumPy reduction over ``axes`` (None = all axes). Empty-axis and
-    zero-size semantics pass straight through to NumPy."""
+    zero-size semantics pass straight through to NumPy. ``count`` is a
+    non-null census (NaN excluded from float data; inf counts as a
+    value; dtypes without NaN count every element)."""
+    if op == "count":
+        return _count_nonnull(arr, axes, keepdims)
     table = {
         "sum": np.sum, "mean": np.mean, "min": np.min,
         "max": np.max, "std": np.std, "var": np.var,
@@ -135,6 +139,24 @@ def apply_reduce(op: str, arr: np.ndarray, axes: tuple | None = None,
     # Empty and partial axis tuples go straight to NumPy, preserving
     # per-op conventions (e.g. var/std over () yield zeros, not input).
     return fn(arr, axis=tuple(axes), keepdims=keepdims)
+
+
+def _count_nonnull(arr: np.ndarray, axes: tuple | None,
+                   keepdims: bool):
+    """Number of non-NaN elements (total or per axis).
+
+    ``axes=None`` reduces everything to a scalar; ``axes=()`` returns
+    the validity mask as integers (reducing over zero axes changes
+    nothing but the representation).
+    """
+    if arr.dtype.kind in "fc":
+        valid = ~np.isnan(arr)
+    else:
+        valid = np.ones(arr.shape, dtype=bool)
+    if axes is None:
+        return int(np.count_nonzero(valid))
+    return np.count_nonzero(valid, axis=tuple(axes),
+                            keepdims=keepdims).astype(np.int64)
 
 
 def matmul(a: np.ndarray, b: np.ndarray) -> np.ndarray:

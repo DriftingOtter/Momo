@@ -682,7 +682,21 @@ def _fit_input(data, estimator: str):
             )
         return data._material(), data._kind
     if isinstance(data, Lazy):
-        return evaluate(data.root)
+        # Explicit runtime boundary: materialize first (bridge admission
+        # runs inside ToDense evaluation); structured results get a
+        # coded bridge diagnostic instead of an uncoded crash.
+        value, vkind = evaluate(data.root)
+        if vkind == "frame":
+            from ..core.errors import TLTypeError as _TLTypeError
+
+            raise _TLTypeError(
+                f"{estimator}.fit needs numerical data; got a structured "
+                f"frame. Convert explicitly first, e.g. "
+                f"frame.to_dense(columns=[...], nulls='nan')",
+                code="TL0418",
+                details={"estimator": estimator,
+                         "suggestion": "to_dense(columns=[...])"})
+        return value, vkind
     raise TLTypeError(
         f"{estimator}.fit needs a Tensor or lazy result, got "
         f"{type(data).__name__}",

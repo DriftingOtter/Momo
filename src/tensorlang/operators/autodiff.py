@@ -536,6 +536,10 @@ def _propagate(node: ir.Expr, cot_value, cot_kind: str,
     if isinstance(node, (ir.SvdPart, ir.EighPart)):
         raise _diff_error("SVD/eigendecomposition",
                           "deferred in v0.4 (see LANGUAGE_SPEC.md)")
+    if isinstance(node, ir.ToDense):
+        raise _diff_error("structured-to-dense conversion",
+                          "differentiate the dense computation after "
+                          "conversion instead (convert, then grad)")
     if isinstance(node, (ir.SortBy, ir.Unique)):
         raise _diff_error("sorting/unique",
                           "permutations have no useful gradient; sort explicitly "
@@ -930,6 +934,10 @@ def _rev_reduce(node: ir.Reduce, cot_value, cot_kind: str, val, acc) -> None:
     if node.by is not None:
         raise _diff_error("grouped reduction",
                           "grouping is discrete; aggregate outside "
+                          "differentiable graphs")
+    if node.op == "count":
+        raise _diff_error("count aggregation",
+                          "counts are discrete; aggregate outside "
                           "differentiable graphs")
     from ..core.expression import resolve_axes
 

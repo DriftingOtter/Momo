@@ -149,6 +149,10 @@ _reg("TL0416", "TLTypeError", "operator is not fittable",
      "Only standardize()/minmax()/normalize()/impute()/pca() (and >> pipelines) support .fit().")
 _reg("TL0417", "TLTypeError", "invalid operator composition",
      "Both sides of >> must be operators; the right side must be unary.")
+_reg("TL0418", "TLTypeError", "unsupported structured-to-dense bridge",
+     "Select existing numeric columns with to_dense(columns=[...]); "
+     "use nulls='error' to forbid missing values, or fit() numerical "
+     "data directly.")
 _reg("TL0420", "TLTypeError", "gradient constructor needs an operator",
      "Pass an Operator to grad()/value_and_grad()/vjp(), not data.")
 _reg("TL0430", "TLTypeError", "invalid join configuration",

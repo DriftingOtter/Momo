@@ -283,6 +283,18 @@ class Tensor:
             return self._data.clone()
         raise TLTypeError("to_polars() is only defined for structured tensors")
 
+    def to_dense(self, columns, nulls: str = "nan") -> "Lazy":
+        """Lazy structured-to-dense bridge (v0.7 M1): select ordered
+        ``columns`` into a lazy dense representation without executing.
+
+        ``nulls="error"`` fails on any missing value; ``nulls="nan"``
+        represents missing values as NaN (nullable-int promotes to
+        float64, Boolean-with-null casts to float64). Row count stays
+        unknown until execution; memory admission happens at the
+        execution boundary (see LANGUAGE_SPEC).
+        """
+        return Lazy(ir.ToDense(self._snapshot_node(), columns, nulls))
+
     # -- dunder operators (all non-mutating -> Lazy) -------------------------------
     def _binop(self, op: str, other: Any) -> "Lazy":
         return Lazy(ir.BinOp(op, expr_of(self), expr_of(other, op)))
@@ -491,6 +503,12 @@ class Tensor:
         """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
         data (tuples and negative axes allowed)."""
         return Lazy(ir.Reduce("var", self._snapshot_node(), _by_expr(by),
+                              axis, keepdims))
+
+    def count(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Non-null census (frames: row counts per group with ``by``).
+        NaN values are excluded from float data; inf counts as a value."""
+        return Lazy(ir.Reduce("count", self._snapshot_node(), _by_expr(by),
                               axis, keepdims))
 
     def is_null(self) -> "Lazy":
@@ -756,6 +774,13 @@ class Lazy:
             return value
         raise TLTypeError("to_polars() is only defined for structured results")
 
+    def to_dense(self, columns, nulls: str = "nan") -> "Lazy":
+        """Lazy structured-to-dense bridge (v0.7 M1): select ordered
+        ``columns`` into a lazy dense representation without executing.
+        See :meth:`Tensor.to_dense` for null policies and guarantees.
+        """
+        return Lazy(ir.ToDense(self._root, columns, nulls))
+
     # -- graph combinators (same surface as Tensor) ---------------------------------------
     def _binop(self, op: str, other: Any) -> "Lazy":
         return Lazy(ir.BinOp(op, self._root, expr_of(other, op)))
@@ -898,6 +923,12 @@ class Lazy:
         """Reduction; ``axis``/``keepdims`` follow NumPy semantics on dense
         data (tuples and negative axes allowed)."""
         return Lazy(ir.Reduce("var", self._root, _by_expr(by),
+                              axis, keepdims))
+
+    def count(self, by=None, *, axis=None, keepdims=False) -> "Lazy":
+        """Non-null census (frames: row counts per group with ``by``).
+        NaN values are excluded from float data; inf counts as a value."""
+        return Lazy(ir.Reduce("count", self._root, _by_expr(by),
                               axis, keepdims))
 
     def is_null(self) -> "Lazy":

@@ -120,6 +120,9 @@ def _lower_reduce(node: ir.Reduce, ctx: _LowerContext) -> pl.LazyFrame:
         raise _NotLowerable(
             f"reduction '{node.op}' with axis has no lazy-frame lowering")
     if node.by is None:
+        if node.op == "count" and not isinstance(node.operand, ir.FieldAccess):
+            # Whole-frame row count (all rows, nulls included).
+            return base.select(pl.len().alias("count"))
         return base.select([getattr(pl.col(c), agg)().alias(c) for c in numeric])
     key = _group_key(node.by)
     if key is None:
@@ -130,6 +133,16 @@ def _lower_reduce(node: ir.Reduce, ctx: _LowerContext) -> pl.LazyFrame:
         raise _NotLowerable(f"cannot plan reduction schema: {exc}")
     if key not in schema:
         raise TLTypeError(f"unknown group field '{key}'")
+    if node.op == "count" and not isinstance(node.operand, ir.FieldAccess):
+        # Group sizes (all rows per group). Column collision guarded
+        # like the eager path. Series operands keep per-field counts
+        # through the generic path below.
+        if key == "count":
+            raise TLTypeError(
+                "grouped count needs a group key not named 'count' "
+                "(it collides with the count output column); rename "
+                "the key first")
+        return base.group_by(key).agg(pl.len().alias("count")).sort(key)
     cols = [c for c in numeric if c != key]
     if not cols:
         raise _NotLowerable(f"grouped '{node.op}' has no plannable numeric fields")

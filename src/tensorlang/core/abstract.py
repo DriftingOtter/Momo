@@ -110,6 +110,7 @@ def tensor_abstract(t) -> dict:
 
 def lazy_abstract(lz) -> dict:
     """Structured summary of a pending computation (never executes)."""
+    from ..core import expression as ir
     from ..runtime.planner import plan
 
     graph = plan(lz._root)
@@ -120,7 +121,7 @@ def lazy_abstract(lz) -> dict:
         memory_policy = current_policy()
     except Exception:  # pragma: no cover - defensive
         memory_policy = {"memory_budget_bytes": None, "max_workers": None}
-    return {
+    out = {
         "nodes": graph.node_count,
         "backends": graph.summary(),
         "target": ({
@@ -130,3 +131,22 @@ def lazy_abstract(lz) -> dict:
         "cached": lz._has_cached,
         "memory_policy": memory_policy,
     }
+    if isinstance(lz._root, ir.ToDense):
+        out["bridge"] = _bridge_abstract(lz._root)
+    return out
+
+
+def _bridge_abstract(node) -> dict:
+    """Read-only bridge summary (schema metadata only, never data rows)."""
+    from ..operators import bridge as _bridge
+
+    schema = _bridge.schema_of(node)
+    rows, known = _bridge.known_rows(node)
+    info: dict = {"columns": list(node.columns), "nulls": node.nulls,
+                  "ncols": len(node.columns), "rows": rows,
+                  "row_known": known, "dtypes": schema,
+                  "predicted_dtype": None}
+    if schema is not None and len(schema) == len(node.columns):
+        info["predicted_dtype"] = _bridge.resolve_dtype(
+            list(schema.values()))
+    return info

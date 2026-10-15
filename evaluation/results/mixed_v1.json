@@ -1,0 +1,119 @@
+{
+  "version": "v1",
+  "tensorlang": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        0.96 real         1.47 user         0.32 sys\n           618872832  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               44446  page reclaims\n                 514  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 253  voluntary context switches\n               20345  involuntary context switches\n         15481204014  instructions retired\n          5563775269  cycles elapsed\n           575063408  peak memory footprint\n",
+    "phases": {
+      "relational": {
+        "median_s": 0.03876858399598859,
+        "min_s": 0.03775662499538157,
+        "max_s": 0.04268566700920928,
+        "repeats": 5
+      },
+      "fit": {
+        "median_s": 0.019433082998148166,
+        "min_s": 0.019099791010376066,
+        "max_s": 0.019518749992130324,
+        "repeats": 5
+      },
+      "infer_train": {
+        "median_s": 0.009665416000643745,
+        "min_s": 0.009515917001408525,
+        "max_s": 0.009911332992487587,
+        "repeats": 5
+      },
+      "infer_holdout": {
+        "median_s": 0.0022727500036126003,
+        "min_s": 0.0022445829963544384,
+        "max_s": 0.0023781250056345016,
+        "repeats": 5
+      },
+      "ridge_solve": {
+        "median_s": 6.0125006712041795e-05,
+        "min_s": 5.745800444856286e-05,
+        "max_s": 8.104099833872169e-05,
+        "repeats": 5
+      }
+    },
+    "convert_s": 0.007363625001744367,
+    "copied": true,
+    "files": {
+      "train": "tl_train.npy",
+      "pred": "tl_pred.npy"
+    },
+    "ridge_w": [
+      16.553957952234907,
+      13.051853014172856,
+      -0.0036196998788342793
+    ],
+    "hold_pred_mean": 98.48876107466015,
+    "executions": 4,
+    "checks": {
+      "rows": 100000,
+      "n_features": 7
+    },
+    "peak_rss_mb": 618.872832,
+    "peak_rss_source": "time -l"
+  },
+  "native": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        1.32 real         1.78 user         0.32 sys\n           631422976  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               70602  page reclaims\n                1321  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                 924  voluntary context switches\n                6930  involuntary context switches\n         17999176807  instructions retired\n          6614538841  cycles elapsed\n           576308544  peak memory footprint\n",
+    "phases": {
+      "relational": {
+        "median_s": 0.03452291699068155,
+        "min_s": 0.034420541996951215,
+        "max_s": 0.035013667002203874,
+        "repeats": 5
+      },
+      "fit": {
+        "median_s": 0.013204207993112504,
+        "min_s": 0.013139458998921327,
+        "max_s": 0.013337791999219917,
+        "repeats": 5
+      },
+      "infer_train": {
+        "median_s": 0.005609915999229997,
+        "min_s": 0.005548458007979207,
+        "max_s": 0.005821124999783933,
+        "repeats": 5
+      },
+      "infer_holdout": {
+        "median_s": 0.0018477080011507496,
+        "min_s": 0.0018443749868310988,
+        "max_s": 0.0018872920045396313,
+        "repeats": 5
+      },
+      "ridge_solve": {
+        "median_s": 0.0022747500042896718,
+        "min_s": 0.00223554098920431,
+        "max_s": 0.002440665994072333,
+        "repeats": 5
+      }
+    },
+    "convert_s": 0.000930041991523467,
+    "files": {
+      "train": "np_train.npy",
+      "pred": "np_pred.npy"
+    },
+    "ridge_w": [
+      16.553957952234892,
+      13.051853014172876,
+      -0.0036196998788350456
+    ],
+    "hold_pred_mean": 98.48876107466013,
+    "checks": {
+      "rows": 100000,
+      "n_features": 7
+    },
+    "peak_rss_mb": 631.422976,
+    "peak_rss_source": "time -l"
+  },
+  "ridge_sign_err": 1.9539925233402755e-14,
+  "ridge_pred_err": 4.547473508864641e-13,
+  "loc": {
+    "tensorlang": 39,
+    "native": 16
+  }
+}

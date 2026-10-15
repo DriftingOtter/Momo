@@ -78,6 +78,8 @@ def _children(node: ir.Expr) -> list[ir.Expr]:
         return [node.operand] + ([node.by] if node.by is not None else [])
     if isinstance(node, ir.WithField):
         return [node.obj, node.value]
+    if isinstance(node, ir.ToDense):
+        return [node.operand]
     if isinstance(node, ir.Join):
         return [node.left, node.right]
     if isinstance(node, (ir.SortBy, ir.Unique)):
@@ -176,6 +178,8 @@ def fold_constants(node: ir.Expr) -> ir.Expr:
             return ir.Reduce(n.op, visit(n.operand),
                              visit(n.by) if n.by is not None else None,
                              n.axis, n.keepdims)
+        if isinstance(n, ir.ToDense):
+            return ir.ToDense(visit(n.operand), n.columns, n.nulls)
         return n
 
     return visit(node)

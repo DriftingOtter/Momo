@@ -248,12 +248,15 @@ def apply_math_func(func: str, arg):
 def apply_reduce(op: str, value, by=None):
     """Whole-frame reductions return a one-row frame preserving labels."""
     agg = {"sum": "sum", "mean": "mean", "min": "min", "max": "max",
-           "std": "std", "var": "var"}[op]
+           "std": "std", "var": "var", "count": "count"}[op]
     if isinstance(value, pl.Series):
         return getattr(value, agg)()
     df = _require_frame(value, op)
     if by is not None:
         return _grouped(op, df, by)
+    if op == "count":
+        # Row count (all rows, nulls included): single-column frame.
+        return df.select(pl.len().alias("count"))
     cols = numeric_columns(df)
     if not cols:
         raise TLTypeError(f"reduction '{op}' has no applicable numerical fields")
@@ -274,7 +277,7 @@ def grouped_series(op: str, series: pl.Series, key: pl.Series) -> pl.DataFrame:
     value_name = series.name or "value"
     key_name = key.name or "group"
     agg = {"sum": "sum", "mean": "mean", "min": "min", "max": "max",
-           "std": "std", "var": "var"}[op]
+           "std": "std", "var": "var", "count": "count"}[op]
     tmp = pl.DataFrame({"__tl_key__": key, "__tl_val__": series})
     return (
         tmp.group_by("__tl_key__")
@@ -304,6 +307,19 @@ def _grouped(op: str, df: pl.DataFrame, by) -> pl.DataFrame:
             raise TLShapeError("group key must be one value per row")
         key, key_name = pl.Series(arr.tolist()), "group"
     cols = [c for c in numeric_columns(df) if c != key_name]
+    if op == "count":
+        # Group sizes (all rows per group, nulls included). The output
+        # column is named "count"; a group key with that name collides.
+        if key_name == "count":
+            raise TLTypeError(
+                "grouped count needs a group key not named 'count' "
+                "(it collides with the count output column); rename "
+                "the key first",
+                code="TL0499",
+                details={"key": key_name})
+        return tmp.group_by("__tl_group__").agg(
+            pl.len().alias("count")
+        ).rename({"__tl_group__": key_name}).sort(key_name)
     if not cols:
         raise TLTypeError(f"grouped '{op}' has no applicable numerical fields")
     tmp = df.with_columns(key.alias("__tl_group__"))

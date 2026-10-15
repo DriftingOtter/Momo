@@ -34,6 +34,7 @@ M4 reliability); `x99` in each range is the generic class fallback.
 | `TL0415` | TLTypeError | missing features on apply | Application data must contain every fitted feature column. |
 | `TL0416` | TLTypeError | operator is not fittable | Only standardize()/minmax()/normalize()/impute()/pca() (and >> pipelines) support .fit(). |
 | `TL0417` | TLTypeError | invalid operator composition | Both sides of >> must be operators; the right side must be unary. |
+| `TL0418` | TLTypeError | unsupported structured-to-dense bridge | Select existing numeric columns with to_dense(columns=[...]); use nulls='error' to forbid missing values, or fit() numerical data directly. |
 | `TL0420` | TLTypeError | gradient constructor needs an operator | Pass an Operator to grad()/value_and_grad()/vjp(), not data. |
 | `TL0430` | TLTypeError | invalid join configuration | Use a documented join type; non-cross joins need explicit on= keys. |
 | `TL0431` | TLTypeError | join key or shape problem | Keys must exist on both sides with compatible lengths. |

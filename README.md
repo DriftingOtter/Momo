@@ -1,4 +1,4 @@
-# TensorLang v0.6.0
+# TensorLang v0.7.0
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic
@@ -295,6 +295,15 @@ Numerical library: `svd` (`U, S, Vh = svd(A)`, one shared computation),
 `quantile`, `einsum`, `tensordot`, `moveaxis`, `onehot`, `polynomial`.
 See `examples/ml_pipeline.tl` and `LANGUAGE_SPEC.md` §10–§12.
 
+Structured-to-dense bridge (v0.7): `frame.to_dense(columns=[...],
+nulls="nan")` selects ordered numeric columns into a lazy dense
+representation without executing. `nulls="error"` fails on any missing
+value; `"nan"` promotes per NumPy rules (nullable-int to float64).
+Row count stays unknown until execution; conversion is memory-admitted
+at the boundary, and fitted operators accept the lazy result directly
+at their explicit `.fit()` boundary. See `LANGUAGE_SPEC.md` §9 and
+`evaluation/M0_INTEROP.md`.
+
 ## Developer tooling
 
 Errors carry stable codes (`error[TL0301]: …`, catalogued in
@@ -528,7 +537,7 @@ drop retained results in long pipelines.
   semantics are unchanged.
 - `join()` takes `on=None` (required except for `how="cross"`).
 
-## Known limitations (v0.4)
+## Known limitations (current)
 
 - Reductions `by=` accept a field name, a field series, or a per-row key
   array; multi-key grouping needs explicit frames.
@@ -538,8 +547,9 @@ drop retained results in long pipelines.
   …) is only reachable via `t["name"]`.
 - Single-identifier set literals (`{X}`) are always parameters in `.tl`
   files; write `{x,}` or use a list for one-element Python sets.
-- Dense evaluation is node-by-node (one temporary per operator, like
-  eager NumPy); there is no dense loop fusion yet.
+- Dense evaluation shares subgraphs within one boundary execution
+  (structurally identical subtrees evaluate once; entries release at
+  last use); there is no dense loop fusion yet.
 - Float aggregates may differ from native plans in the last bit
   (engine-defined summation order); benchmarks compare those approximately
   after proving identical row membership.
@@ -548,7 +558,17 @@ drop retained results in long pipelines.
 - Autodiff covers the documented rule set; Jacobians, forward-mode JVP,
   higher-order derivatives, SVD/einsum rules, and differentiation through
   fitting are deferred. Integer intermediates compute in float64.
-- No GPU, distributed, supervised ML, or ML training loops yet —
-  those are future milestones (out-of-core next). The planner
+- No GPU, distributed execution, or ML training loops — those remain
+  explicitly out of scope. The planner
   does backend selection, single-query lowering, and safe constant folding
   only.
+- Structured-to-dense conversion gates conversion working memory after
+  the upstream frame materializes; upstream collection itself is not
+  bounded by the bridge policy (see `to_dense()` docs). No global
+  cross-boundary result caching: repeated collection of independently
+  built lazy objects re-executes; collect once and reuse for hot paths.
+- Grouped `count` covers single keys; multi-key grouping stays
+  rejected; a group key literally named `"count"` collides with the
+  output column and is rejected with guidance.
+- Windows support is best-effort and untested in CI; power-loss
+  durability beyond atomic rename is not claimed.

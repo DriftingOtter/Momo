@@ -35,7 +35,7 @@ def apply(op: str, value, kind: str, by, evaluate, axis=None,
         arr = np.asarray(value)
         axes = ir.resolve_axes(axis, arr.ndim, op, arr.shape)
         out = _np_be.apply_reduce(op, arr, axes, keepdims)
-        if isinstance(out, np.ndarray) and out.ndim == 0 and not keepdims:
+        if np.ndim(out) == 0 and not keepdims:
             return out, "scalar"
         return out, "dense"
     if kind == "series":
@@ -79,6 +79,11 @@ def apply(op: str, value, kind: str, by, evaluate, axis=None,
             ir.resolve_axes(axis, 0, op, ())
         if op == "sum" and axis is None:
             return value, "scalar"
+        if op == "count":
+            arr = np.asarray(value)
+            if arr.dtype.kind in "fc" and bool(np.isnan(arr)):
+                return 0, "scalar"
+            return 1, "scalar"
         return _np_be.apply_reduce(op, np.asarray(value), (), keepdims), \
             "scalar"
     raise TLTypeError(f"unsupported reduction operand")  # pragma: no cover
@@ -88,6 +93,7 @@ def _series_reduce(op: str, series: pl.Series):
     table = {
         "sum": series.sum, "mean": series.mean, "min": series.min,
         "max": series.max, "std": series.std, "var": series.var,
+        "count": series.count,
     }
     try:
         return table[op]()

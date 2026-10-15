@@ -211,6 +211,8 @@ def _structure_keys(root: ir.Expr) -> dict[int, object]:
             return ("Reduce", n.op, kids(n))
         if isinstance(n, ir.WithField):
             return ("WithField", n.name, kids(n))
+        if isinstance(n, ir.ToDense):
+            return ("ToDense", tuple(n.columns), n.nulls, kids(n))
         if isinstance(n, ir.Join):
             return ("Join", _freeze(n.on), n.how, n.suffix, kids(n))
         if isinstance(n, ir.SortBy):
@@ -559,6 +561,10 @@ def _evaluate(node: ir.Expr) -> tuple[Any, str]:
         obj, kind = evaluate(node.obj)
         value, _ = evaluate(node.value)
         return _with_field_fallback(obj, kind, node.name, value)
+    if isinstance(node, ir.ToDense):
+        from ..operators import bridge as _bridge
+
+        return _bridge.evaluate(node, evaluate)
     if isinstance(node, ir.Join):
         lowered = _try_lowered(node)
         if lowered is not None:

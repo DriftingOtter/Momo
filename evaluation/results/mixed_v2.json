@@ -1,0 +1,126 @@
+{
+  "version": "v2",
+  "tensorlang": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        1.15 real         2.67 user         0.50 sys\n           634978304  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               48340  page reclaims\n                  56  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   6  voluntary context switches\n               40724  involuntary context switches\n         26404164561  instructions retired\n          9564356918  cycles elapsed\n           590824864  peak memory footprint\n",
+    "phases": {
+      "explicit_convert": {
+        "median_s": 0.03869575000135228,
+        "min_s": 0.03677266699378379,
+        "max_s": 0.03941474999010097,
+        "repeats": 5
+      },
+      "bridge_convert": {
+        "median_s": 0.04160345799755305,
+        "min_s": 0.04098383299424313,
+        "max_s": 0.04465816701122094,
+        "repeats": 5
+      },
+      "fit": {
+        "median_s": 0.019897457998013124,
+        "min_s": 0.019562208995921537,
+        "max_s": 0.02076037500228267,
+        "repeats": 5
+      },
+      "infer_train": {
+        "median_s": 0.01017387499450706,
+        "min_s": 0.00996708299499005,
+        "max_s": 0.010572332990705036,
+        "repeats": 5
+      },
+      "infer_holdout": {
+        "median_s": 0.0024519169965060428,
+        "min_s": 0.002379624987952411,
+        "max_s": 0.002589832991361618,
+        "repeats": 5
+      },
+      "ridge_solve": {
+        "median_s": 5.7833007303997874e-05,
+        "min_s": 5.604200123343617e-05,
+        "max_s": 7.495901081711054e-05,
+        "repeats": 5
+      }
+    },
+    "convert_s": null,
+    "copied": true,
+    "lazy_reuse_s": 0.06183466600487009,
+    "files": {
+      "train": "tl_train.npy",
+      "pred": "tl_pred.npy"
+    },
+    "ridge_w": [
+      16.5539579522349,
+      13.051853014172876,
+      -0.003619699878853686
+    ],
+    "hold_pred_mean": 98.48876107466015,
+    "executions": 2,
+    "checks": {
+      "rows": null,
+      "n_features": 7
+    },
+    "peak_rss_mb": 634.978304,
+    "peak_rss_source": "time -l"
+  },
+  "native": {
+    "returncode": 0,
+    "stdout_tail": "",
+    "stderr_tail": "        1.14 real         1.79 user         0.28 sys\n           646938624  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               72571  page reclaims\n                  44  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   1  voluntary context switches\n                6266  involuntary context switches\n         17842140228  instructions retired\n          6495140744  cycles elapsed\n           592102720  peak memory footprint\n",
+    "phases": {
+      "relational": {
+        "median_s": 0.03371912500006147,
+        "min_s": 0.03358237499196548,
+        "max_s": 0.04004079200967681,
+        "repeats": 5
+      },
+      "fit": {
+        "median_s": 0.013348624997888692,
+        "min_s": 0.013076957999146543,
+        "max_s": 0.014461667000432499,
+        "repeats": 5
+      },
+      "infer_train": {
+        "median_s": 0.005606041988357902,
+        "min_s": 0.005568874999880791,
+        "max_s": 0.005813125011627562,
+        "repeats": 5
+      },
+      "infer_holdout": {
+        "median_s": 0.0018432500073686242,
+        "min_s": 0.0018184170039603487,
+        "max_s": 0.0018537919968366623,
+        "repeats": 5
+      },
+      "ridge_solve": {
+        "median_s": 0.0022567910054931417,
+        "min_s": 0.0022240839898586273,
+        "max_s": 0.0023015000042505562,
+        "repeats": 5
+      }
+    },
+    "convert_s": 0.001023125005303882,
+    "files": {
+      "train": "np_train.npy",
+      "pred": "np_pred.npy"
+    },
+    "ridge_w": [
+      16.553957952234892,
+      13.051853014172876,
+      -0.0036196998788350456
+    ],
+    "hold_pred_mean": 98.48876107466013,
+    "checks": {
+      "rows": 100000,
+      "n_features": 7
+    },
+    "peak_rss_mb": 646.938624,
+    "peak_rss_source": "time -l"
+  },
+  "ridge_sign_err": 1.864047111110878e-14,
+  "ridge_pred_err": 4.547473508864641e-13,
+  "loc": {
+    "tensorlang": 39,
+    "native": 16
+  }
+}

@@ -1,6 +1,25 @@
 # TensorLang changelog
 
-## v0.6.0 — workload-driven numerics and natural tensor ops (RC)
+## v0.7.0 — unified analytical pipelines
+
+- `frame.to_dense(columns=[...], nulls="error"|"nan")`: lazy,
+  schema-aware conversion to dense tensors (no data read at
+  construction; row count unknown until execution).
+- Deterministic dtype promotion (nullable-int to float64, explicit
+  Boolean-with-null cast) validated against NumPy conversion.
+- Memory admission at the execution boundary (`TL1020`) with
+  documented post-upstream guarantee scope; unknown cardinality
+  labeled, never zeroed.
+- Grouped `count`: row counts (`frame.count(by)`) and non-null field
+  counts (`series.count(by)`), native Polars parity, u32 preserved.
+- `fit()` accepts lazy dense inputs; structured Lazy inputs get a
+  coded `TL0418` diagnostic recommending the bridge.
+- Differentiation through conversion deferred with a diagnostic.
+- `abstract()`/`explain()`/`profile()` expose bridge semantics,
+  estimates, and observed timings.
+- 463 tests; evaluation reports under `evaluation/`.
+
+## v0.6.0 — workload-driven numerics and natural tensor ops
 
 - Dense execution: sharing-preserving parameter remapping, scoped
   evaluation memo with use-count eviction, structural deduplication

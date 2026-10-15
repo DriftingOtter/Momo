@@ -41,8 +41,11 @@ TL_BODY = """
                           lambda: np.asarray(fitted(tl_T(hold_np)).collect()))
         assert tout.shape[1] == 2 and hout.shape[1] == 2, (tout.shape, hout.shape)
         def main():
+            dump = os.environ.get("TL_EVAL_DUMP", ".")
+            np.save(os.path.join(dump, "tl_train.npy"), np.asarray(tout))
+            np.save(os.path.join(dump, "tl_hold.npy"), np.asarray(hout))
             return {"phases": _PHASES,
-                    "train_out": tout.tolist(), "hold_out": hout.tolist(),
+                    "files": {"train": "tl_train.npy", "hold": "tl_hold.npy"},
                     "checks": {"rows": rel.height,
                                "nulls": int(sum(rel.null_count().row(0)))}}
 """
@@ -67,9 +70,11 @@ NP_BODY = """
         hout = time_phase("apply_holdout", lambda: pipe.transform(hold_np))
         assert tout.shape[1] == 2 and hout.shape[1] == 2
         def main():
+            dump = os.environ.get("TL_EVAL_DUMP", ".")
+            np.save(os.path.join(dump, "np_train.npy"), np.asarray(tout))
+            np.save(os.path.join(dump, "np_hold.npy"), np.asarray(hout))
             return {"phases": _PHASES,
-                    "train_out": np.asarray(tout).tolist(),
-                    "hold_out": np.asarray(hout).tolist(),
+                    "files": {"train": "np_train.npy", "hold": "np_hold.npy"},
                     "checks": {"rows": rel.height,
                                "nulls": int(sum(rel.null_count().row(0)))}}
 """
@@ -87,6 +92,12 @@ def np_loc() -> int:
     return harness.user_loc(inspect.getsource(workloads.np_features))
 
 
+def _dump_dir(*parts: str) -> str:
+    path = os.path.join(DATA, "arrays", *parts)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def main() -> None:
     os.makedirs(DATA, exist_ok=True)
     cust_path = os.path.join(DATA, "w2_cust.parquet")
@@ -95,22 +106,36 @@ def main() -> None:
         print("generating data...")
         workloads.make_data(cust_path, txn_path, N_CUST, N_TXN)
     print("=== workload 2: data science (cust=%d txn=%d) ===" % (N_CUST, N_TXN))
-    tl = harness.run_isolated(harness.driver_template(
-        TL_BODY % (cust_path, txn_path)))
-    assert tl["returncode"] == 0, tl["stderr_tail"]
-    np_res = harness.run_isolated(harness.driver_template(
-        NP_BODY % (cust_path, txn_path)))
-    assert np_res["returncode"] == 0, np_res["stderr_tail"]
+    import numpy as _np
+
+    old_dump = os.environ.get("TL_EVAL_DUMP")
+    try:
+        os.environ["TL_EVAL_DUMP"] = _dump_dir("data-science", "tl")
+        tl = harness.run_isolated(harness.driver_template(
+            TL_BODY % (cust_path, txn_path)))
+        assert tl["returncode"] == 0, tl["stderr_tail"]
+        os.environ["TL_EVAL_DUMP"] = _dump_dir("data-science", "np")
+        np_res = harness.run_isolated(harness.driver_template(
+            NP_BODY % (cust_path, txn_path)))
+        assert np_res["returncode"] == 0, np_res["stderr_tail"]
+    finally:
+        if old_dump is None:
+            os.environ.pop("TL_EVAL_DUMP", None)
+        else:
+            os.environ["TL_EVAL_DUMP"] = old_dump
     for key in ("rows", "nulls"):
         assert tl["checks"][key] == np_res["checks"][key], (key, tl["checks"])
     # PCA sign indeterminacy: compare absolute projections end to end.
-    import numpy as _np
-    for split in ("train_out", "hold_out"):
-        a, b = _np.asarray(tl[split]), _np.asarray(np_res[split])
+    errs = {}
+    for split, tkey, nkey in (("train", "tl_train.npy", "np_train.npy"),
+                              ("hold", "tl_hold.npy", "np_hold.npy")):
+        a = _np.load(os.path.join(DATA, "arrays", "data-science", "tl", tkey))
+        b = _np.load(os.path.join(DATA, "arrays", "data-science", "np", nkey))
         assert a.shape == b.shape, (split, a.shape, b.shape)
-        err = float(_np.abs(_np.abs(a) - _np.abs(b)).max())
-        assert err < 1e-9, (split, err)
+        errs[split] = float(_np.abs(_np.abs(a) - _np.abs(b)).max())
+        assert errs[split] < 1e-9, (split, errs[split])
     summary = {"tensorlang": tl, "native": np_res,
+               "projection_err": errs,
                "loc": {"tensorlang": tl_loc(), "native": np_loc() + 3}}
     with open(os.path.join(RESULTS, "data_science.json"), "w") as fh:
         json.dump(summary, fh, indent=2)

@@ -628,6 +628,23 @@ def lower(node: ir.Expr, ctx: _ChunkContext, env: dict) -> object:
         operand = lower(node.operand, ctx, env)
         shape = tuple(operand.shape)
         axes = _resolve_axes(node.axis, len(shape), node.op, shape)
+        if node.op == "count":
+            # Non-null census via self-equality (NaN != NaN excludes only
+            # NaN; uniform across dtypes, tree-reducible, narrow bool
+            # temporaries per block).
+            counted = (operand == operand)
+            if axes:
+                out = counted.sum(axis=list(axes),
+                                  keepdims=bool(node.keepdims))
+            else:
+                out = counted.astype("int64")
+            ctx.plan.step("tree-reducible", "count",
+                          f"non-null census over axes {list(axes)} "
+                          f"keepdims={bool(node.keepdims)}: "
+                          f"{_nparts(operand)} partitions")
+            _track(ctx, _block_bytes(operand) + _block_bytes(out),
+                   "reduction 'count' (input + census blocks)")
+            return _admit(out, ctx, "count")
         try:
             out = getattr(operand, _REDUCTIONS[node.op])(
                 axis=list(axes), keepdims=bool(node.keepdims))

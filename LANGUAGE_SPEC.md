@@ -1,4 +1,4 @@
-# TensorLang Language Specification — v0.6.0
+# TensorLang Language Specification — v0.7.0
 
 This document defines TensorLang independently of its backing libraries
 (NumPy, Polars, SymPy, SciPy). Implementations must honor the observable
@@ -125,6 +125,14 @@ reject `.inplace()` with a descriptive error.
   values; a structured field literally named `"T"` stays reachable via
   explicit string indexing (`X["T"]`). Transposing heterogeneous frames
   is rejected (`TL0901`).
+- Structured-to-dense bridge: `frame.to_dense(columns=[...],
+  nulls="nan"|"error")` builds a lazy dense representation without
+  executing. Column order preserved; unknown/duplicate columns,
+  non-numeric dtypes, and unknown policies raise `TL0418`; `nulls="error"`
+  fails on any missing value while `"nan"` promotes per NumPy rules
+  (nullable-int to float64). Row count stays unknown until execution;
+  conversion is memory-admitted at the execution boundary (`TL1020`).
+  Differentiating through a conversion is deferred with a diagnostic.
 - Dense snapshots are zero-copy read-only views; external arrays are
   copied once at the graph boundary. Frames use cheap clones.
 
@@ -175,6 +183,11 @@ The same operator has the same logical meaning across representations:
 - Reductions preserve labels (one-row frames); `by=` groups explicitly.
   `over()` broadcasts per-group aggregates back to row shape (unlike
   reductions).
+- Counting: `frame.count(by=key)` gives per-group row counts (null rows
+  included, null keys form their own group) in a `count` column of the
+  backend's integer dtype; `series.count(by=key)` gives per-group
+  non-null value counts. The two are never conflated. Row and value
+  counts agree only when no nulls are present.
 - `@`, transpose, reshape on heterogeneous frames are rejected as
   genuinely undefined. Ambiguous operations raise descriptive errors;
   nothing is silently discarded, reordered, or invented.

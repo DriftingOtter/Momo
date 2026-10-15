@@ -250,6 +250,22 @@ def explain_lazy(root: ir.Expr) -> str:
             ])
     except ImportError:  # pragma: no cover - defensive
         pass
+    try:
+        from ..core import expression as ir
+
+        if isinstance(root, ir.ToDense):
+            from ..operators import bridge as _bridge
+
+            rows, _ = _bridge.known_rows(root)
+            physical = _bridge.describe(root.columns, root.nulls,
+                                        _bridge.schema_of(root), rows)
+            graph = _plan_graph(root)
+            return "\n".join([
+                "logical plan (TensorLang IR):", logical, "", physical, "",
+                f"graph: {graph.node_count} nodes; backends {graph.summary()}",
+            ])
+    except Exception:  # pragma: no cover - defensive introspection
+        pass
     physical, _ = _lower.explain_plan(root)
     graph = _plan_graph(root)
     lines = [
@@ -291,6 +307,10 @@ class ProfileResult:
     task_count: int | None = None  # chunked: executed dask tasks
     pressure_observed: bool = False  # observed delta far above budget+model
     pressure_code: str | None = None  # "TL1022" when pressure_observed
+    bridge_materialize_ms: float | None = None  # to_dense: frame fetch
+    bridge_convert_ms: float | None = None  # to_dense: select/stack
+    bridge_rows: int | None = None  # to_dense: converted rows
+    bridge_dtype: str | None = None  # to_dense: output dtype
 
     def __str__(self) -> str:
         shape = self.shape if self.shape is not None else f"{self.rows}x{self.cols}"
@@ -318,6 +338,11 @@ class ProfileResult:
             text += f" tasks={self.task_count}"
         if self.pressure_observed:
             text += f" pressure={self.pressure_code or 'TL1022'}"
+        if self.bridge_materialize_ms is not None:
+            text += (f" bridge_materialize={self.bridge_materialize_ms:.1f}ms "
+                     f"bridge_convert={self.bridge_convert_ms or 0.0:.1f}ms "
+                     f"bridge_rows={self.bridge_rows} "
+                     f"bridge_dtype={self.bridge_dtype}")
         if self.forward_ms is not None and self.backward_ms is not None:
             text += (f" forward={self.forward_ms:.2f}ms "
                      f"backward={self.backward_ms:.2f}ms")
@@ -347,6 +372,12 @@ def profile_lazy(root: ir.Expr):
     scans_before = _io.SCAN_EXECUTIONS
     chunks_before = _io.CHUNK_EXECUTIONS
     rss_before = _rss_mb()
+    try:
+        from ..operators.bridge import reset as _bridge_reset
+
+        _bridge_reset()
+    except Exception:  # pragma: no cover - defensive
+        pass
     tracemalloc.start()
     start = time.perf_counter()
     decision: dict = {}
@@ -415,7 +446,24 @@ def profile_lazy(root: ir.Expr):
         task_count=(decision.get("tasks") if decision else None),
         pressure_observed=pressure,
         pressure_code=pressure_code,
+        **_bridge_profile_fields(),
     )
+
+
+def _bridge_profile_fields() -> dict:
+    """Latest bridge execution record for profile() (absent when no
+    to_dense() ran)."""
+    try:
+        from ..operators.bridge import LAST_BRIDGE
+
+        if not LAST_BRIDGE:
+            return {}
+        return {"bridge_materialize_ms": LAST_BRIDGE.get("materialize_ms"),
+                "bridge_convert_ms": LAST_BRIDGE.get("convert_ms"),
+                "bridge_rows": LAST_BRIDGE.get("rows"),
+                "bridge_dtype": LAST_BRIDGE.get("dtype")}
+    except Exception:  # pragma: no cover - defensive
+        return {}
 
 
 def _ad_phases(root):

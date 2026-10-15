@@ -11,7 +11,6 @@ silently materializing. Collect the inputs explicitly to use the full
 in-memory library.
 
 ## Elementwise and scalar math — chunked: yes
-
 Arithmetic (`+ - * / ** %`), comparisons, `neg`, `abs`, `sin cos tan exp
 log sqrt`, `is_null`/`not_null`, `fill_null`, `where`, `clip`.
 Broadcasting across differently chunked inputs aligns through explicit
@@ -48,6 +47,15 @@ chunk sizes).
 Estimator fitting/application and `grad`/`value_and_grad`/`vjp` over
 chunked data are deferred (`TL1001`/`TL0809`); `collect()` explicitly,
 then use the in-memory paths.
+
+## Structured-to-dense bridge (v0.7) — lazy, admitted
+
+`frame.to_dense(columns=[...], nulls="error"|"nan")` converts selected
+numeric columns without executing; row count unknown until execution;
+conversion memory-admitted at the boundary (`TL1020`); unknown/duplicate
+columns, non-numeric dtypes, and bad policies raise `TL0418`.
+Differentiating through a conversion is deferred with a diagnostic.
+Fitting accepts lazy dense results at the explicit `.fit()` boundary.
 
 ## Sinks — chunked: yes
 
