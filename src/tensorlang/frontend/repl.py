@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.errors import TensorLangError
+from ..core.errors import TensorLangError, TLDeclarationError
 
 INCOMPLETE_CORES = (
     "unexpected EOF",
@@ -39,12 +39,16 @@ class Repl:
 
     def __init__(self) -> None:
         from . import compiler as _compiler
+        from . import modules as _modules
 
         self._compiler = _compiler
         self.namespace: dict = {"__name__": "__tl_main__",
                                 "__file__": "<repl>"}
         self.namespace.update(_compiler.base_namespace())
         self._buffer: list[str] = []
+        import os as _os
+
+        self._tl_session = _modules.LoaderSession(_os.getcwd())
 
     # -- input handling -----------------------------------------------------------
     def push(self, line: str) -> str | None:
@@ -64,7 +68,10 @@ class Repl:
         from ..core.errors import TLSyntaxError as _TLSyntaxError
 
         try:
-            self._compiler.compile_source_tree(source, filename="<repl>")
+            self._compiler.compile_source_tree(
+                source, filename="<repl>",
+                trusted_names=self._compiler.namespace_trusted_names(
+                    self.namespace))
         except _TLSyntaxError as exc:
             marker = "invalid TensorLang syntax: "
             message = exc.message
@@ -85,9 +92,13 @@ class Repl:
 
     def _execute(self, source: str) -> str:
         from . import compiler as _compiler
+        from . import modules as _modules
 
         try:
-            code, tree = _compiler.compile_source_tree(source, filename="<repl>")
+            code, tree = _compiler.compile_source_tree(
+                source, filename="<repl>",
+                trusted_names=_compiler.namespace_trusted_names(
+                    self.namespace))
         except TensorLangError as exc:
             return _format_error(exc)
         import ast as _ast
@@ -96,6 +107,20 @@ class Repl:
             code = self._with_display_capture(source, tree)
         previous = _compiler.CURRENT_FILENAME
         _compiler.CURRENT_FILENAME = "<repl>"
+        legs = _modules.plan_cycle(tree, self._tl_session.base_dir,
+                                   entry_name="<repl>")
+        if legs:
+            _compiler.CURRENT_FILENAME = previous
+            return _format_error(TLDeclarationError(
+                _modules.describe_cycle(legs), loc="<repl>",
+                code="TL0312"))
+        try:
+            _modules.claim_session(self._tl_session)
+        except TensorLangError as exc:
+            _compiler.CURRENT_FILENAME = previous
+            return _format_error(exc)
+        self._tl_session.exec_stack.append(self._tl_session.base_dir)
+        self._tl_session._exec_top = "<repl>"  # type: ignore[attr-defined]
         try:
             exec(code, self.namespace)
         except TensorLangError as exc:
@@ -108,6 +133,12 @@ class Repl:
             return _diagnose.format_human(report)
         finally:
             _compiler.CURRENT_FILENAME = previous
+            self._tl_session.exec_stack.pop()
+            try:
+                delattr(self._tl_session, "_exec_top")
+            except AttributeError:
+                pass
+            _modules.release_session(self._tl_session)
         captured = self.namespace.pop("__tl_repl_display__", None)
         return self._display_captured(tree, captured)
 
@@ -163,6 +194,12 @@ class Repl:
                              "__tl_param__", "__builtins__")}
             self.namespace.clear()
             self.namespace.update(keep)
+            from . import modules as _modules
+
+            import os as _os
+
+            self._tl_session.close()
+            self._tl_session = _modules.LoaderSession(_os.getcwd())
             return "(bindings cleared)"
         if cmd in (":explain", ":profile", ":graph") and len(args) == 1:
             return self._inspect(cmd[1:], args[0])

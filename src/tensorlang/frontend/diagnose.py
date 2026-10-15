@@ -113,6 +113,16 @@ def _from_details(code: str, details: dict, text: str) -> list[str]:
     if code == "TL0301":
         out.append("Change ':=' to '=': the right-hand side executes an "
                    "operator application at runtime.")
+    if code == "TL0305":
+        out.append("Change ':=' to '=': arbitrary Python calls run only in "
+                   "an explicitly runtime context; ':=' admits supported "
+                   "declarative TensorLang operations.")
+    if code == "TL0310":
+        out.append("Import a sibling .tl file by name (resolved relative to "
+                   "the importing file); Python imports take precedence.")
+    if code == "TL0312":
+        out.append("Restructure so .tl dependencies flow one way; circular "
+                   "imports are rejected.")
     if code == "TL0304":
         out.append("Bind reads with '=', or describe the source lazily with "
                    "T.scan_parquet()/T.scan_csv() under ':='.")

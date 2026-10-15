@@ -1,0 +1,3 @@
+# Generated evaluation datasets and run outputs (reproducible via data/generate_data.py)
+data/*.parquet
+out/

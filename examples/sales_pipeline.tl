@@ -15,7 +15,9 @@ from tensorlang import T
 here = os.path.dirname(os.path.abspath(__file__))
 
 # 1. A lazy scan is a declarative descriptor: nothing is read here.
-sales := T.scan_parquet(os.path.join(here, "data", "sales-demo.parquet"))
+# (Path joins are runtime calls, so they are precomputed with '='.)
+sales_path = os.path.join(here, "data", "sales-demo.parquet")
+sales := T.scan_parquet(sales_path)
 
 # 2. Reusable scoped predicate and transformation operators.
 valid := (

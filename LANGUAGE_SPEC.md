@@ -48,11 +48,30 @@ allowed; `=` rebinding afterwards is allowed.
 | effectful | I/O or mutation | `T.read(...)`, `t.write_*`, `o(x).inplace()` |
 
 `:=` **must** reject runtime and effectful expressions; `=` **must** be used
-for them. Data-dependent calls whose class is statically unknowable (e.g.
+for them. Calls are fail-closed: every call (and every attribute/subscript
+access) in a `:=` right-hand side **must** resolve to a known declarative
+capability — a name imported from `tensorlang`, the `tensorlang` module
+itself, a name introduced by `:=` in the same file, or the internal
+parameter hook. Arbitrary Python calls (`evil.grab()`, aliases, bound
+methods, `os.path.join(...)`, builtins such as `print`/`len`) are rejected
+with `TL0305` **without executing**, including when nested inside a
+supported constructor: `T.scan_parquet(os.path.join(...))` **must** be
+written with a precomputed runtime path (`p = os.path.join(...); s :=
+T.scan_parquet(p)`). Data-dependent calls whose class is statically
+unknowable (e.g.
 `sin(x)`: declarative for operator input, runtime for tensor input) are
 decided by the value check: pending `Lazy` results and I/O-provenance
 tensors are rejected. A lazy scan descriptor **must** be accepted (it reads
 nothing). `x = f` binds the operator itself and **must not** apply it.
+
+Python-injected bindings (`run_source(..., extra={...})`) enter the
+entry namespace only. Precedence is deterministic: `=` rebinding keeps
+module precedence; `:=` declaring over an injected name is a `TL0203`
+conflict; dunder names are rejected outright. Injected callables are
+never implicitly trusted under `:=` (identity-based M1 seeding
+excepted). Imported `.tl` modules never inherit `extra`.
+This is effect enforcement, not sandboxing (see `docs/EFFECTS.md` for the
+exact boundary and residual risks).
 
 ## 4. Runtime assignment (`=`)
 
@@ -191,6 +210,11 @@ The same operator has the same logical meaning across representations:
 - `@`, transpose, reshape on heterogeneous frames are rejected as
   genuinely undefined. Ambiguous operations raise descriptive errors;
   nothing is silently discarded, reordered, or invented.
+- Missing values: NaN and null are distinct (dense IEEE vs structured
+  total-order equality; see `docs/COMPARISONS.md`). Filters **must**
+  use `is_null()`/`not_null()`; `==` self-comparisons are not missing-
+  value predicates. `to_dense(nulls="nan")` promotes null to NaN;
+  `nulls="error"` rejects missing values (`TL0418`).
 
 ## 12. Mathematics
 
@@ -393,7 +417,32 @@ reported separately; no rechunk-to-fit is introduced. New diagnostics
 is classified effectful so `:=` cannot bypass I/O protection
 (`describe_write()` is read-only introspection).
 
-## 17. Version history
+## 18. Modules (v0.8 M2)
+
+`.tl` files import each other with existing syntax (`import m`,
+`from m import x`, aliases, dotted paths). Dotted names map to
+relative paths (`a.b` → `a/b.tl`) resolved against the importing
+file; Python imports take precedence; parents are inert namespace
+packages; relative imports are rejected (`TL0314`).
+
+Every module compiles through the existing frontend (same scope and
+M1 effect validation), executes in an isolated namespace, and is
+cached per loader session: repeated imports reuse initialized modules
+and operator identities, while independent executions stay isolated.
+Circular imports are rejected (`TL0312`) by static pre-scan before
+execution; missing modules/symbols report chains (`TL0310`/`TL0311`);
+initialization failures chain their cause (`TL0313`).
+
+Imported names are ordinary bindings: `pipeline := f >> g` and
+`result = f(data)` work; `r := f(data)` through an imported name is
+`TL0305` (use `=`). Parameter identity stays UID-based. CLI
+graph/explain/profile preflight inspects the transitive `.tl` graph
+without executing it. Bare directories import as inert package shells
+(`__init__` never executes). Loader sessions are process-global and
+not thread-safe: overlapping cross-thread sessions are rejected with
+`TL0315`; parallel execution **must** use subprocesses. See `docs/MODULES.md`.
+
+## 19. Version history
 
 - **v0.1**: frontend, scoped operators, dense/structured/symbolic core,
   lazy execution, explicit mutation.

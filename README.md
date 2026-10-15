@@ -1,4 +1,4 @@
-# TensorLang v0.7.0
+# TensorLang v0.8.0
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic
@@ -72,6 +72,26 @@ tensorlang check examples/core_demo.tl    # parse + validate only
 python -m tensorlang run examples/core_demo.tl
 ```
 
+Multi-file programs use ordinary imports between `.tl` files — resolved
+relative to the importing file, validated by the same frontend
+(including the `:=` effect rules), and cached per execution:
+
+```python
+# operators/calibration.tl
+calibrate := {M} * 2 + 1
+```
+
+```python
+# analysis.tl
+from operators.calibration import calibrate
+
+pipeline := calibrate >> ({X} + 10)
+result = pipeline(data)
+```
+
+See [`docs/MODULES.md`](docs/MODULES.md) for resolution, caching,
+circular-import rejection, and the exact supported subset.
+
 You can also embed the language in Python:
 
 ```python
@@ -83,6 +103,11 @@ print(f(T(4)).collect())   # 17
 
 ns = run_source("from tensorlang import T\ny := T([1, 2])\n")
 ```
+
+`run_source` accepts `extra={...}` to inject Python values into the
+entry namespace (imported `.tl` modules never inherit them): `=`
+rebinding keeps module precedence while `:=` over an injected name is
+a `TL0203` conflict — see [`docs/MODULES.md`](docs/MODULES.md).
 
 ## Language syntax
 
