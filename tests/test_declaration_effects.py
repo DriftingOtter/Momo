@@ -68,20 +68,24 @@ def test_original_reproducer_blocked_without_effect(evil):
     assert _evil.SENTINEL is None
 
 
-def test_original_reproducer_in_subprocess():
+def test_original_reproducer_in_subprocess(tmp_path):
+    import os
+    import pathlib
+
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    sub = tmp_path / "m1sub"
+    sub.mkdir()
+    (sub / "evil.py").write_text(EVIL_SRC)
     code = (
-        "import sys; sys.path.insert(0, 'src'); sys.path.insert(0, '/tmp/m1sub');\n"
+        "import sys; sys.path.insert(0, 'src'); "
+        f"sys.path.insert(0, {str(sub)!r});\n"
         "import evil;\n"
         "from tensorlang import run_source;\n"
         "run_source('import evil\\nx := evil.grab()\\n', filename='s.tl');\n"
         "print('SENTINEL=' + str(evil.SENTINEL))\n"
     )
-    import os
-
-    os.makedirs("/tmp/m1sub", exist_ok=True)
-    open("/tmp/m1sub/evil.py", "w").write(EVIL_SRC)
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                          text=True, cwd="/Users/daksh/Documents/Coding Projects/TensorLang")
+                          text=True, cwd=str(repo))
     assert proc.returncode != 0
     assert "TL0305" in proc.stderr or "TL0305" in proc.stdout
     assert "SENTINEL=grabbed" not in (proc.stdout + proc.stderr)
