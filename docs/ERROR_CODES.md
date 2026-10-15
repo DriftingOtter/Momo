@@ -15,11 +15,19 @@ M4 reliability); `x99` in each range is the generic class fallback.
 | `TL0199` | TLSyntaxError | unspecified syntax error | Generic syntax failure; see the message. |
 | `TL0201` | TLScopeError | duplicate declaration | A name may be declared once per scope; use = to reassign. |
 | `TL0202` | TLScopeError | declaration needs a plain name | := must introduce a plain name in the current scope. |
+| `TL0203` | TLScopeError | injected binding collision | A := declaration collides with a Python-injected (extra=) binding; rename the declaration or stop injecting the name (= rebinding keeps module precedence). |
 | `TL0299` | TLScopeError | unspecified scope error | Generic scope failure; see the message. |
 | `TL0301` | TLDeclarationError | runtime application under := | Operator application executes; bind its result with = instead. |
 | `TL0302` | TLDeclarationError | effectful expression under := | Reads, writes, and inplace() are effectful; use = (or T.scan_* for a lazy descriptor). |
 | `TL0303` | TLDeclarationError | runtime expression under := | collect()/fit()/conversions execute; bind their result with =. |
 | `TL0304` | TLDeclarationError | effectful tensor under := | Tensors from T.read() carry I/O provenance; use = to bind them. |
+| `TL0305` | TLDeclarationError | unclassified Python call under := | Only supported declarative TensorLang operations may execute under :=; move arbitrary Python calls into an explicitly runtime context (=). |
+| `TL0310` | TLDeclarationError | missing TensorLang module | No sibling .tl file matches the import; check the name and the importing file's directory (Python imports take precedence). |
+| `TL0311` | TLDeclarationError | missing module symbol | The .tl module has no such exported name; check spelling and the module's top-level bindings. |
+| `TL0312` | TLDeclarationError | circular TensorLang import | Circular .tl imports are rejected; restructure so dependencies flow one way. |
+| `TL0313` | TLDeclarationError | module initialization failure | The imported .tl module failed to initialize; see the chained cause and import chain. |
+| `TL0314` | TLDeclarationError | unsupported import | Only top-level absolute imports of local .tl files are supported; relative imports and name collisions need restructuring. |
+| `TL0315` | TLDeclarationError | concurrent loader sessions unsupported | Independent .tl executions cannot overlap across threads; run them sequentially or in separate processes. |
 | `TL0399` | TLDeclarationError | unspecified declaration error | Generic declaration failure; see the message. |
 | `TL0401` | TLTypeError | ambiguous truth value | Tensors have no truth value; collect() an explicit Boolean or reduce first. |
 | `TL0402` | TLTypeError | cannot iterate a tensor | Iteration is never implicit; collect() or index explicitly first. |

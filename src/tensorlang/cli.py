@@ -134,12 +134,33 @@ def _introspect(args) -> int:
 
     from .frontend import effects as _effects
     from .frontend import lexer as _lexer
+    from .frontend import modules as _modules
 
     import ast as _ast
 
+    effects: list = []
     try:
         translated = _lexer.translate(_Path(args.file).read_text(encoding="utf-8"))
-        effects = _effects.find_effects(_ast.parse(translated))
+        effects = [(f"{name} [{args.file}]", lineno)
+                   for name, lineno in _effects.find_effects(_ast.parse(translated))]
+        entry = _Path(args.file).resolve()
+        if entry.suffix == ".tl":
+            extra, cycle, unsupported = _modules.transitive_effects(
+                entry, str(entry.parent))
+            for dep_file, dotted, lineno in extra:
+                if dep_file != str(entry):
+                    effects.append((f"{dotted} [{dep_file}]", lineno))
+            if unsupported:
+                shown_u = ", ".join(f"line {n} ({f})" for f, n in unsupported[:3])
+                print(f"refusing to introspect {args.file}: it uses "
+                      f"unsupported relative .tl imports ({shown_u}).",
+                      file=sys.stderr)
+                return 1
+            if cycle:
+                print(f"refusing to introspect {args.file}: circular "
+                      f".tl imports:\n{_modules.describe_cycle(cycle)}",
+                      file=sys.stderr)
+                return 1
     except Exception:  # pragma: no cover - unreadable source surfaces below
         effects = []
     print(f"note: {args.file} executes to build its graphs; "

@@ -18,7 +18,9 @@ from tensorlang import T, clear_chunk_policy, set_chunk_policy
 here = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Open a persistent chunked dataset lazily (reads no data).
-data := T.scan_zarr(os.path.join(here, "data", "large-demo.zarr"))
+# (Path joins are runtime calls, so they are precomputed with '='.)
+data_path = os.path.join(here, "data", "large-demo.zarr")
+data := T.scan_zarr(data_path)
 
 # 2. Configure a working-memory policy: ~2.8MB budget, at most 2 workers.
 #    The demo dataset (default 200K x 8 = 12.8MB) is several times larger.

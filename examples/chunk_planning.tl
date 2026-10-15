@@ -15,8 +15,11 @@ from tensorlang import T
 here = os.path.dirname(os.path.abspath(__file__))
 
 # 1. Two lazily loaded chunked tensors (different chunkings).
-a := T.scan_zarr(os.path.join(here, "data", "large-demo.zarr"))
-b := T.scan_zarr(os.path.join(here, "data", "other-demo.zarr"))
+# (Path joins are runtime calls, so they are precomputed with '='.)
+a_path = os.path.join(here, "data", "large-demo.zarr")
+b_path = os.path.join(here, "data", "other-demo.zarr")
+a := T.scan_zarr(a_path)
+b := T.scan_zarr(b_path)
 
 # 2. A reusable mathematical operator (chunk-layout independent).
 f := {X} * {Y}

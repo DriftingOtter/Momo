@@ -1,5 +1,23 @@
 # TensorLang changelog
 
+## v0.8.0 (unreleased) — modular applications
+
+- Native file-based `.tl` imports (`import m`, `from m import x`,
+  aliases, dotted paths): resolved relative to the importing file,
+  Python-first precedence, per-session caching, isolated namespaces,
+  static circular-import rejection (`TL0312`), chained diagnostics
+  (`TL0310`–`TL0314`).
+- Fail-closed declarative effect enforcement: unclassified Python calls
+  under `:=` rejected as `TL0305` before execution (no grammar change).
+- Deterministic `extra=` injection precedence: `:=` over an injected
+  binding is `TL0203`; `=` rebinding keeps module precedence; dunder
+  injection rejected; injected modules never inherit `extra`.
+- Documented NaN-vs-null comparison contract across dense/structured
+  representations (`docs/COMPARISONS.md`); no semantic changes.
+- CLI transitive effect preflight for `graph`/`explain`/`profile`;
+  REPL module sessions with `:reset` cache clearing.
+- No new operators, backends, or execution-engine changes.
+
 ## v0.7.0 — unified analytical pipelines
 
 - `frame.to_dense(columns=[...], nulls="error"|"nan")`: lazy,

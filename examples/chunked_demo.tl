@@ -15,7 +15,9 @@ from tensorlang import T, sin
 here = os.path.dirname(os.path.abspath(__file__))
 
 # 1. A lazy persistent numerical tensor (reads no data).
-data := T.scan_zarr(os.path.join(here, "data", "large-demo.zarr"))
+# (Path joins are runtime calls, so they are precomputed with '='.)
+data_path = os.path.join(here, "data", "large-demo.zarr")
+data := T.scan_zarr(data_path)
 
 # 2. An ordinary operator — same meaning on one array or many chunks.
 transform := sin({X}) + {X}**2
