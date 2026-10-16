@@ -52,7 +52,9 @@ then use the in-memory paths.
 
 `frame.to_dense(columns=[...], nulls="error"|"nan")` converts selected
 numeric columns without executing; row count unknown until execution;
-conversion memory-admitted at the boundary (`TL1020`); unknown/duplicate
+conversion working memory admitted after the upstream frame
+materializes (`TL1020` gates conversion only, not upstream execution
+or hard RSS); unknown/duplicate
 columns, non-numeric dtypes, and bad policies raise `TL0418`.
 Differentiating through a conversion is deferred with a diagnostic.
 Fitting accepts lazy dense results at the explicit `.fit()` boundary.

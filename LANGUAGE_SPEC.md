@@ -37,32 +37,58 @@ f-string fields) retain Python meaning.
 `NAME := expr` introduces `NAME` in the current lexical scope
 (module/function/class; control-flow blocks share the enclosing scope).
 Redeclaring in the same scope is an error; shadowing an outer scope is
-allowed; `=` rebinding afterwards is allowed.
+allowed; `=` rebinding afterwards is allowed. Declaration checking is
+static: a `:=` inside a loop body is one syntactic declaration, so it
+may execute once per iteration without violating the redeclaration rule
+(the rule forbids two `:=` bindings for one name in one scope, not
+repeated execution of one binding).
 
-`expr` is classified syntactically **and** by value:
+`expr` is classified syntactically **and** by value. The trusted-name set
+is file-flat: any name introduced by `:=` anywhere in the same file
+authorizes later `:=` uses of that name in the static check (uses from
+unrelated scopes still fail at runtime with `NameError` if the name is
+not actually bound there).
 
 | Class | Meaning | Examples |
 |---|---|---|
 | declarative | describes without executing | `T(...)`, `{X}**2`, `f >> g`, `diff(f)`, `T.scan_*` |
 | runtime | needs execution | `f(data)`, `t.collect()`, `op.fit(data)` |
 | effectful | I/O or mutation | `T.read(...)`, `t.write_*`, `o(x).inplace()` |
+| plain value | already-computed data | `y := x` (Tensor alias), `y := x.shape` (tuple) |
 
 `:=` **must** reject runtime and effectful expressions; `=` **must** be used
-for them. Calls are fail-closed: every call (and every attribute/subscript
+for them. Plain (non-`Lazy`, non-I/O-provenance) values are admissible:
+only pending computations and I/O provenance count as "runtime" for the
+value check. `x = f` binds the operator itself by alias (operators are
+immutable, so aliasing is indistinguishable from copying) and **must
+not** apply it.
+
+Calls are fail-closed: every call (and every attribute/subscript
 access) in a `:=` right-hand side **must** resolve to a known declarative
 capability — a name imported from `tensorlang`, the `tensorlang` module
 itself, a name introduced by `:=` in the same file, or the internal
-parameter hook. Arbitrary Python calls (`evil.grab()`, aliases, bound
-methods, `os.path.join(...)`, builtins such as `print`/`len`) are rejected
+parameter hook. The check is root-based: any attribute/subscript chain
+whose roots are all trusted (declared, imported, or literal) is admitted
+statically, and the value check then decides (with `x := T([1,2])`,
+`y := x.shape` admits a tuple while `y := x[0]` fails `TL0301` at
+runtime; with `x = T([1,2])`, both are `TL0305` because the root itself
+is a runtime binding). Method calls on literal receivers
+(`'hi'.upper()`) are admitted because builtin methods on literals run no
+user code. Arbitrary Python calls (`evil.grab()`,
+aliases, bound methods, `os.path.join(...)`, builtins such as
+`print`/`len`) are rejected
 with `TL0305` **without executing**, including when nested inside a
 supported constructor: `T.scan_parquet(os.path.join(...))` **must** be
 written with a precomputed runtime path (`p = os.path.join(...); s :=
-T.scan_parquet(p)`). Data-dependent calls whose class is statically
+T.scan_parquet(p)`). The declarative set is open by identity, not closed
+by example: any
+name imported from `tensorlang` (including `grad`, `P`, `T`) is trusted;
+data-dependent calls whose class is statically
 unknowable (e.g.
 `sin(x)`: declarative for operator input, runtime for tensor input) are
 decided by the value check: pending `Lazy` results and I/O-provenance
 tensors are rejected. A lazy scan descriptor **must** be accepted (it reads
-nothing). `x = f` binds the operator itself and **must not** apply it.
+nothing).
 
 Python-injected bindings (`run_source(..., extra={...})`) enter the
 entry namespace only. Precedence is deterministic: `=` rebinding keeps
@@ -149,8 +175,14 @@ reject `.inplace()` with a descriptive error.
   executing. Column order preserved; unknown/duplicate columns,
   non-numeric dtypes, and unknown policies raise `TL0418`; `nulls="error"`
   fails on any missing value while `"nan"` promotes per NumPy rules
-  (nullable-int to float64). Row count stays unknown until execution;
-  conversion is memory-admitted at the execution boundary (`TL1020`).
+  (nullable-int to float64). Row count stays unknown until execution.
+  Memory admission covers conversion working memory only, after the
+  upstream structured operand materializes: the bridge first evaluates
+  its upstream frame, then admits the dense-conversion estimate (never
+  estimated from unknown cardinality) at the execution boundary
+  (`TL1020`). The conversion budget is therefore not a bound on
+  upstream structured execution, nor a hard process-RSS cap (RSS
+  baseline, BLAS threads, and fragmentation are outside the model).
   Differentiating through a conversion is deferred with a diagnostic.
 - Dense snapshots are zero-copy read-only views; external arrays are
   copied once at the graph boundary. Frames use cheap clones.
@@ -204,7 +236,17 @@ The same operator has the same logical meaning across representations:
   Separately materialized results have no proven correspondence: filter
   sequentially or derive predicates from one source.
 - Joins require explicit keys (`cross` excepted); row order without an
-  explicit `sort` is backend-defined.
+  explicit `sort` is backend-defined. Relational row ordering is never
+  guaranteed unless an operation with documented ordering semantics
+  (`sort`, single-row reductions) establishes it. Row identity, row
+  ordering, and logical relational equivalence are distinct: two
+  evaluations may return the same logical rows in different positions,
+  and independently materialized results (even from the same logical
+  query) have no proven positional correspondence — never zip them with
+  dense positional alignment. Supported patterns: derive related
+  features in one logical query; materialize related columns together;
+  `sort` by a deterministic key when an ordered result is required;
+  align separate results through explicit stable identifiers.
 - Reductions preserve labels (one-row frames); `by=` groups explicitly.
   `over()` broadcasts per-group aggregates back to row shape (unlike
   reductions).
@@ -396,7 +438,12 @@ for `profile()` tooling. Persistent output has two modes on one surface
 (lower storage overhead; partial outputs possible after failure) and
 staged publication (default for local stores; complete and validate in
 a same-filesystem staging directory — chunk census and metadata only,
-never data reads — then an atomic rename). Staged runs never publish a
+never data reads — then publish via rename). Each individual rename is
+atomic on POSIX, but backup-based overwrite is a recoverable multi-step
+replacement (backup rename, then publish rename), not one continuously
+atomic overwrite: between the two renames the destination is briefly
+absent, and power-loss durability is not claimed (see
+docs/RECOVERY.md). Staged runs never publish a
 partial dataset as success and never destroy a preexisting valid
 destination before its replacement validates (`overwrite=True` swaps via
 a backup round-trip); concurrent publications are detected at publish
@@ -480,7 +527,8 @@ not thread-safe: overlapping cross-thread sessions are rejected with
   than the budget, `TL1020`–`TL1024` diagnostics, estimate-vs-measured
   introspection.
 - **v0.5 M4**: execution reliability and persistent data integrity —
-  per-run lifecycle states, staged publication with atomic local rename,
+  per-run lifecycle states, staged publication with POSIX-atomic renames
+  (recoverable multi-step replacement on overwrite; see docs/RECOVERY.md),
   output validation without data reads, source-consistency checks with
   report-once resynchronization, interruption/cancellation handling,
   stale-staging recovery, `TL1030`–`TL1035` diagnostics.

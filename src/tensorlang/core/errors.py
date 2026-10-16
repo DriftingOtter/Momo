@@ -111,6 +111,9 @@ _reg("TL0101", "TLSyntaxError", "invalid syntax",
      "Check the reported line for TensorLang/Python syntax mistakes.")
 _reg("TL0102", "TLSyntaxError", "malformed declaration",
      "Do not call __tl_declare__ directly; write NAME := expr.")
+_reg("TL0103", "TLSyntaxError", "missing or unreadable source file",
+     "Check the .tl path and retry; TensorLang never substitutes a "
+     "similarly named file.")
 _reg("TL0201", "TLScopeError", "duplicate declaration",
      "A name may be declared once per scope; use = to reassign.")
 _reg("TL0202", "TLScopeError", "declaration needs a plain name",

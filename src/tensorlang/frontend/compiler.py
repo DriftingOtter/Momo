@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from ..core.errors import TLDeclarationError, TLScopeError
+from ..core.errors import TLDeclarationError, TLScopeError, TLSyntaxError
 from ..core.operator import Operator, P
 from ..core.tensor import Lazy, Tensor
 from . import lexer as _lexer
@@ -92,7 +92,22 @@ def compile_source_tree(source: str, filename: str = "<tl>",
 def check_source(source: str, filename: str = "<tl>",
                  trusted_names: frozenset[str] | None = None,
                  injected_names: frozenset[str] | None = None) -> ast.Module:
-    """Translate and validate without compiling (for ``tensorlang check``)."""
+    """Translate and validate without compiling (for ``tensorlang check``).
+
+    The supported public signature is ``(source, filename)``.  The
+    ``trusted_names`` / ``injected_names`` parameters are deprecated
+    internal plumbing: they remain honored for backward compatibility
+    but are not part of the v1.0 stable contract (see
+    ``docs/COMPATIBILITY.md``) and will warn.
+    """
+    if trusted_names is not None or injected_names is not None:
+        import warnings as _warnings
+
+        _warnings.warn(
+            "check_source(trusted_names=..., injected_names=...) is "
+            "deprecated internal plumbing and is not part of the stable "
+            "API; call check_source(source, filename)",
+            DeprecationWarning, stacklevel=2)
     return _parser.parse(_lexer.translate(source), filename, trusted_names,
                          injected_names)
 
@@ -219,12 +234,40 @@ def _run_with_session(source: str, filename: str,
     return namespace
 
 
+def read_source_file(path: str | Path) -> str:
+    """Read a ``.tl`` source file or raise a structured ``TL0103`` error.
+
+    Missing and unreadable files are recognized user errors: callers get
+    a ``TLSyntaxError[TL0103]`` naming the requested path (exit status 1
+    through the CLI) instead of a raw traceback.  TensorLang never
+    substitutes a similarly named file.
+    """
+    location = str(path)
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise TLSyntaxError(
+            "source file not found (check the path and retry)",
+            loc=location, code="TL0103",
+            details={"path": location})
+    except IsADirectoryError:
+        raise TLSyntaxError(
+            "source path is a directory, not a .tl file",
+            loc=location, code="TL0103",
+            details={"path": location})
+    except OSError as exc:
+        raise TLSyntaxError(
+            f"cannot read source file: {exc}",
+            loc=location, code="TL0103",
+            details={"path": location})
+
+
 def run_file(path: str | Path) -> dict[str, Any]:
     """Execute a ``.tl`` source file."""
     path = Path(path)
     if path.suffix != ".tl":
         raise TLDeclarationError(f"TensorLang source files use '.tl': {path}")
-    source = path.read_text(encoding="utf-8")
+    source = read_source_file(path)
     sys.path.insert(0, str(path.resolve().parent))
     try:
         return run_source(source, filename=str(path))

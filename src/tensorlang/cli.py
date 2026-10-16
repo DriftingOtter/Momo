@@ -71,9 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run":
             _compiler.run_file(args.file)
         elif args.command == "check":
-            from pathlib import Path
-
-            source = Path(args.file).read_text(encoding="utf-8")
+            source = _compiler.read_source_file(args.file)
             _compiler.check_source(source, filename=args.file)
             print(f"{args.file}: OK")
         elif args.command == "diagnose":
@@ -143,7 +141,7 @@ def _introspect(args) -> int:
 
     effects: list = []
     try:
-        translated = _lexer.translate(_Path(args.file).read_text(encoding="utf-8"))
+        translated = _lexer.translate(_compiler.read_source_file(args.file))
         effects = [(f"{name} [{args.file}]", lineno)
                    for name, lineno in _effects.find_effects(_ast.parse(translated))]
         entry = _Path(args.file).resolve()

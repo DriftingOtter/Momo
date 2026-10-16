@@ -1,5 +1,30 @@
 # TensorLang changelog
 
+## v1.0.0
+
+- Corrupt manifests reported as invalid (never as a missing project).
+- `tl add` accepts local `.whl` dependencies via uv path sources.
+- uv failures preserve diagnostic context (credentials redacted).
+- Missing/unreadable `.tl` inputs produce structured `TL0103`
+  diagnostics (no raw tracebacks).
+- `to_dense()` contract states the post-upstream admission boundary;
+  persistence docs state the recoverable multi-step replacement.
+- `check_source()` stable 2-arg form; plumbing deprecated.
+- Join row ordering documented as backend-defined with safe patterns.
+- Proposed v1.0 contract: `docs/API_STABILITY.md` stable subset (66),
+  `docs/COMPATIBILITY.md` policy (pending release approval).
+- M3: `docs/GETTING_STARTED.md` (validated end-to-end in a clean
+  environment), `docs/TROUBLESHOOTING.md`, library-consumer guide;
+  M2 skipped (standard packaging + `tl add <wheel>` sufficient).
+- M4: dependency floors corrected from evidence (`polars>=1.21` for
+  rolling `min_samples`; `scipy>=1.11` for Python 3.12 wheels;
+  `zarr>=3.0.8` excluding yanked data-loss releases); portability
+  lint (`scripts/check_portability.py`, CI-gated, allowlisted
+  fixtures); machine-readable API inventory
+  (`tests/test_public_api.py`); release validation script
+  (`scripts/release_check.py`, verify-only); example tolerance
+  aligned with the numerical policy.
+
 ## v0.9.0
 
 - Structured mask composition fused per row domain; incompatible

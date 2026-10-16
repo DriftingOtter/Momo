@@ -20,6 +20,10 @@ Admitted under `:=`: names imported from `tensorlang`, the
 namespace bindings (REPL/extra), and the internal `{X}` hook.
 Attribute/subscript roots resolve by the same rule, so property
 getters and `__getitem__` on foreign objects are also rejected.
+Method calls on literal receivers (`'hi'.upper()`) are admitted:
+builtin methods on literals run no user code. Plain already-computed
+values (Tensor aliases, tuples such as `x.shape`) are admissible; only
+pending `Lazy` results and I/O provenance count as runtime.
 Runtime (`=`) contexts retain full Python interoperability.
 
 ## Non-guarantees

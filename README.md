@@ -115,14 +115,19 @@ For multi-file applications, the `tl` project manager (uv-backed)
 handles scaffolding, environments, and execution:
 
 ```bash
-tl new my-app
+tl new my-app --tensorlang /path/to/TensorLang  # until TensorLang is indexed
 cd my-app
 tl sync        # create .venv + install deps (uv.lock)
 tl run         # execute the configured entry point
-tl test        # pytest inside the environment
+tl add --dev pytest && tl sync && tl test  # pytest inside the environment
+tl add ./dist/mylib-0.1.0-py3-none-any.whl  # local wheel dependency (M1)
 ```
 
-See [`docs/PROJECTS.md`](docs/PROJECTS.md).
+See [`docs/PROJECTS.md`](docs/PROJECTS.md). New users start with
+[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md); when things
+break, see [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+`tensorlang doctor` reports the runtime environment; `tl doctor`
+diagnoses a project.
 
 ## Language syntax
 
