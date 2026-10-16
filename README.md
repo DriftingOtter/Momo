@@ -1,4 +1,4 @@
-# TensorLang v0.9.0
+# TensorLang v1.0.0
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic
@@ -128,6 +128,12 @@ See [`docs/PROJECTS.md`](docs/PROJECTS.md). New users start with
 break, see [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 `tensorlang doctor` reports the runtime environment; `tl doctor`
 diagnoses a project.
+
+Learn the language step by step in the
+[wiki tutorials](https://github.com/DriftingOtter/Momo/wiki/Learn-TensorLang):
+operators, declarations, structured data, fitting and
+differentiation, and multi-file projects — each with runnable
+examples.
 
 ## Language syntax
 
@@ -616,3 +622,17 @@ drop retained results in long pipelines.
   output column and is rejected with guidance.
 - Windows support is best-effort and untested in CI; power-loss
   durability beyond atomic rename is not claimed.
+
+## License
+
+Copyright (C) 2026 Daksh Kaul.
+
+TensorLang is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License version 2
+(GPL-2.0-only) as published by the Free Software Foundation. See
+[`COPYING`](COPYING) for the full text, or
+<https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
