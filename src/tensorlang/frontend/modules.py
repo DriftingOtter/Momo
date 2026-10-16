@@ -67,8 +67,10 @@ class LoaderSession:
         # thread are rejected fail-fast (TL0315).  Same-thread nesting
         # joins the active session.
         self.owner: int = _me()
-        # Canonical resolved path -> initialized module.
-        self.modules: dict[str, ModuleType] = {}
+        # (Canonical path, module name) -> initialized module.  Same file
+        # under different dotted spellings initializes independently,
+        # exactly like CPython treats one file imported under two names.
+        self.modules: dict[tuple[str, str], ModuleType] = {}
         # sys.modules names owned by this session -> module object.
         self.owned: dict[str, ModuleType] = {}
         # Conflicting bindings to sweep on close.
@@ -85,8 +87,8 @@ class LoaderSession:
         # Directories of the .tl modules currently executing (innermost last).
         self.exec_stack: list[str] = []
 
-    def cached(self, path: str) -> ModuleType | None:
-        return self.modules.get(path)
+    def cached(self, path: str, name: str) -> ModuleType | None:
+        return self.modules.get((path, name))
 
     def own(self, name: str, module: ModuleType) -> None:
         existing = sys.modules.get(name)
@@ -506,7 +508,9 @@ class _TlFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
             raise TLDeclarationError(chain, loc=None,
                                      code="TL0312",
                                      details={"module": fullname})
-        cached = sess.cached(canonical)
+        # Cache identity is (path, name): same file under a different
+        # spelling initializes an independent module (CPython semantics).
+        cached = sess.cached(canonical, fullname)
         spec = importlib.util.spec_from_loader(fullname, self)
         assert spec is not None
         spec.origin = canonical  # type: ignore[attr-defined]
@@ -527,7 +531,7 @@ class _TlFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         if state.get("cached"):
             sess = active_session()
             if sess is not None:
-                mod = sess.cached(state["path"])
+                mod = sess.cached(state["path"], spec.name)
                 if mod is not None:
                     return mod
         return None
@@ -546,7 +550,7 @@ class _TlFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
                 sess.own(module.__name__, module)
             return
         canonical: str = state["path"]
-        if canonical in sess.modules:
+        if (canonical, module.__name__) in sess.modules:
             return
         if canonical in sess.loading:
             raise TLDeclarationError(
@@ -598,7 +602,7 @@ class _TlFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
                 sess._exec_top = previous_top  # type: ignore[attr-defined]
             if canonical in sess.loading:
                 sess.loading.remove(canonical)
-        sess.modules[canonical] = module
+        sess.modules[(canonical, module.__name__)] = module
 
 
 def _chain_failure(sess: LoaderSession, name: str, canonical: str,

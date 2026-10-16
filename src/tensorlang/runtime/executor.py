@@ -17,7 +17,7 @@ import numpy as np
 import polars as pl
 
 from ..core import expression as ir
-from ..core.errors import TLTypeError
+from ..core.errors import TLTypeError, TensorLangError
 from ..operators import arithmetic as _arith
 from ..operators import data_science as _ds
 from ..operators import elementary as _math
@@ -464,10 +464,18 @@ def trace_evaluate(root: ir.Expr, release: bool = True):
 
 
 def _try_lowered(node: ir.Expr):
-    """Best-effort single-query execution; ``None`` when not lowerable."""
+    """Best-effort single-query execution; ``None`` when not lowerable.
+
+    Proven row-domain mismatches (``TL0512``) always propagate: they are
+    correctness verdicts, not planning failures.
+    """
     try:
         value, kind, _ = _lower.collect_lowered(node)
         return value, kind
+    except TensorLangError as exc:
+        if getattr(exc, "code", None) == "TL0512":
+            raise
+        return None
     except Exception:
         # Graceful degradation: any lowering failure (unsupported shape or
         # internal error) falls back to the node-by-node reference path,
@@ -487,6 +495,14 @@ def _evaluate(node: ir.Expr) -> tuple[Any, str]:
             f"to data before execution"
         )
     if isinstance(node, ir.BinOp):
+        if node.op in ("and", "or"):
+            # Fuse same-domain boolean logic into one relational query so
+            # separately planned sides can never zip positionally.  Proven
+            # mismatches raise TL0512; unanalyzable shapes keep the
+            # historical node-by-node path.
+            lowered = _try_lowered(node)
+            if lowered is not None:
+                return lowered
         left, _ = evaluate(node.left)
         right, _ = evaluate(node.right)
         return _arith.apply(node.op, left, right)

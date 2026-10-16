@@ -326,3 +326,18 @@ def test_series_and_vector_inputs():
     assert np.allclose(out.to_list(), [-1.34164079, -0.4472136, 0.4472136, 1.34164079])
     v = T([1.0, 2.0, 3.0, 4.0])
     assert np.allclose(standardize().fit(v)(v).collect(), out.to_list())
+
+
+def test_unfitted_application_fails_fast_with_precise_code(train):
+    from tensorlang import TLTypeError
+
+    with pytest.raises(TLTypeError) as exc_info:
+        standardize()(train)
+    assert exc_info.value.code == "TL0419"
+    assert ".fit(" in str(exc_info.value)
+    with pytest.raises(TLTypeError) as exc_info:
+        (standardize() >> pca(2))(train)
+    assert exc_info.value.code == "TL0419"
+    # Fitting still works and the fitted result applies.
+    fitted = standardize().fit(train)
+    assert fitted(train).collect().shape == train.collect().shape

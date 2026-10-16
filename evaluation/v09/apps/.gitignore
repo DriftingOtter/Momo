@@ -1,0 +1,8 @@
+# Generated evaluation datasets and run outputs (reproducible via data/generate.py)
+data/*.parquet
+data/*.npz
+data/*.zarr
+out_*.parquet
+out_*.npz
+out/
+__pycache__/

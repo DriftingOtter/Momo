@@ -32,9 +32,11 @@ from operators.calibration import calibrate   # dotted → relative path
 - Each module gets an isolated namespace; only imported names enter
   the importer. Top-level runtime statements execute on import (imports
   are not side-effect-free by claim).
-- One execution = one `LoaderSession`: repeated imports reuse the
-  initialized module and its first-class operator objects (uid-scoped
-  `{X}` parameters untouched — no filename-based scoping).
+- One execution = one `LoaderSession`: repeated imports under one
+  spelling reuse the initialized module and its first-class operator
+  objects (uid-scoped `{X}` parameters untouched — no filename-based
+  scoping). Different spellings of one file initialize independently
+  (CPython semantics).
 - Independent `run_file()` calls are isolated sessions (modules
   re-initialize; numerical caches were never shared either). The REPL
   keeps one session until `:reset`.

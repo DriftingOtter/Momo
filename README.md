@@ -1,4 +1,4 @@
-# TensorLang v0.8.0
+# TensorLang v0.9.0
 
 TensorLang is a tensor-oriented programming language for general numerical
 computing, large-scale data processing, structured datasets, and symbolic
@@ -108,6 +108,21 @@ ns = run_source("from tensorlang import T\ny := T([1, 2])\n")
 entry namespace (imported `.tl` modules never inherit them): `=`
 rebinding keeps module precedence while `:=` over an injected name is
 a `TL0203` conflict — see [`docs/MODULES.md`](docs/MODULES.md).
+
+## Project workflow (`tl`)
+
+For multi-file applications, the `tl` project manager (uv-backed)
+handles scaffolding, environments, and execution:
+
+```bash
+tl new my-app
+cd my-app
+tl sync        # create .venv + install deps (uv.lock)
+tl run         # execute the configured entry point
+tl test        # pytest inside the environment
+```
+
+See [`docs/PROJECTS.md`](docs/PROJECTS.md).
 
 ## Language syntax
 
@@ -330,7 +345,6 @@ at their explicit `.fit()` boundary. See `LANGUAGE_SPEC.md` §9 and
 `evaluation/M0_INTEROP.md`.
 
 ## Developer tooling
-
 Errors carry stable codes (`error[TL0301]: …`, catalogued in
 `docs/ERROR_CODES.md` and generated from one registry). `tensorlang
 diagnose FILE` re-runs a program with fix suggestions (did-you-mean

@@ -551,6 +551,18 @@ class FittableOperator(Operator):
         return FittableOperator(self.estimator_kind, self.config, state,
                                 uid=self.uid)
 
+    def __call__(self, *args: Any):
+        if not self.is_fitted:
+            raise TLTypeError(
+                f"operator '{self.estimator_kind}' is not fitted: call "
+                f".fit(training_data) first and apply the fitted result "
+                f"(unfitted application is rejected when applied, not at "
+                f"collection)",
+                code="TL0419",
+                details={"estimator": self.estimator_kind},
+            )
+        return super().__call__(*args)
+
     def __rshift__(self, other) -> Operator:
         return _compose_pipeline(self, other)
 
@@ -613,6 +625,29 @@ class PipelineOperator(Operator):
             value, vkind = _apply_stage(stage, value, vkind)
             new_stages.append(stage)
         return PipelineOperator(new_stages, uid=self.uid)
+
+    def __call__(self, *args: Any):
+        unfitted = [s.estimator_kind for s in self._flat_stages()
+                    if isinstance(s, FittableOperator) and not s.is_fitted]
+        if unfitted:
+            raise TLTypeError(
+                f"pipeline stage '{unfitted[0]}' is not fitted: call "
+                f".fit(training_data) first and apply the fitted pipeline "
+                f"(unfitted application is rejected when applied, not at "
+                f"collection)",
+                code="TL0419",
+                details={"estimator": unfitted[0]},
+            )
+        return super().__call__(*args)
+
+    def _flat_stages(self) -> list[Operator]:
+        out: list[Operator] = []
+        for stage in self.stages:
+            if isinstance(stage, PipelineOperator):
+                out.extend(stage._flat_stages())
+            else:
+                out.append(stage)
+        return out
 
     def __rshift__(self, other) -> Operator:
         if isinstance(other, PipelineOperator):
