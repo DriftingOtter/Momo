@@ -1623,10 +1623,20 @@ def _execute_write(graph, target: str, workers: int, overwrite: bool) -> dict:
 
 def _cleanup_staging(staging: str | None) -> None:
     """Remove staging after workers are done; TL1035 with a recovery path
-    when removal itself fails."""
+    when removal itself fails.
+
+    Removal is verified: an interrupt landing inside a native call
+    (e.g. ``zarr.open_array``) leaves that call's event-loop thread
+    completing store creation after the first removal, so a reappeared
+    staging directory is removed again within a small bounded window.
+    Anything still present afterwards is left for
+    ``recover_stale_staging()`` rather than masking the original
+    error. A directory that vanishes on its own counts as cleaned.
+    """
     if not staging:
         return
     import os as _os
+    import time as _time
 
     if not _os.path.exists(staging):
         return
@@ -1634,6 +1644,8 @@ def _cleanup_staging(staging: str | None) -> None:
 
     try:
         _be.remove_path(staging)
+    except FileNotFoundError:
+        return
     except Exception as exc:
         raise TLUnsupportedError(
             f"cleanup of staging '{staging}' failed: {exc}; remove it "
@@ -1642,6 +1654,30 @@ def _cleanup_staging(staging: str | None) -> None:
             details={"staging": staging,
                      "recovery": f"remove {staging!r} manually "
                                  f"after confirming no run is active"}) from exc
+    deadline = _time.monotonic() + 2.0
+    delay = 0.02
+    while True:
+        try:
+            still_there = _os.path.exists(staging)
+        except OSError:
+            return
+        if not still_there:
+            return
+        if _time.monotonic() >= deadline:
+            # Best effort exhausted: the original error stands and the
+            # leftover is recoverable via recover_stale_staging().
+            return
+        _time.sleep(delay)
+        delay = min(delay * 2, 0.2)
+        try:
+            _be.remove_path(staging)
+        except FileNotFoundError:
+            return
+        except Exception:
+            # A genuine removal failure here must not mask the
+            # interruption/failure being handled; leave the staging
+            # for recover_stale_staging().
+            return
 
 
 def write_or_raise(root: ir.Expr, path: str, overwrite: bool,

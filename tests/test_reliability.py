@@ -301,6 +301,38 @@ def test_injected_failures_rejects_unknown_keys():
             pass
 
 
+def test_cleanup_removes_reappearing_staging(tmp_path, monkeypatch):
+    """Regression: an interrupted native call may finish creating the
+    staging directory after the first removal (its event loop was only
+    interrupted out of ``wait``, not cancelled). Cleanup verifies and
+    removes the reappearance instead of leaving it behind."""
+    from tensorlang.backends import dask_backend as _be
+
+    staging = tmp_path / "dest.zarr.tlstage-x"
+    staging.mkdir()
+    calls = []
+
+    real_remove = _be.remove_path
+
+    def flaky_remove(path):
+        calls.append(path)
+        real_remove(path)
+        if len(calls) == 1:
+            # Simulate the native loop thread completing store
+            # creation just after cleanup removed the directory.
+            os.makedirs(path, exist_ok=True)
+
+    monkeypatch.setattr(_be, "remove_path", flaky_remove)
+    _cp._cleanup_staging(str(staging))  # must not raise
+    assert calls and not os.path.exists(staging)
+
+
+def test_cleanup_missing_staging_is_silent(tmp_path):
+    _cp._cleanup_staging(str(tmp_path / "dest.zarr.tlstage-absent"))
+    _cp._cleanup_staging(None)
+    _cp._cleanup_staging("")
+
+
 @pytest.mark.skipif(sys.platform == "win32",
                         reason="POSIX signal delivery; Windows untested")
 def test_interruption_subprocess_preserves_destination(tmp_path):
