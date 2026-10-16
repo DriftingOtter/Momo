@@ -195,13 +195,20 @@ def diagnose_source(source: str, filename: str = "<tl>") -> dict:
 
 
 def diagnose_file(path: str | Path) -> dict:
-    """Diagnose a `.tl` file; adds the file path to the report."""
+    """Diagnose a `.tl` file; adds the file path to the report.
+
+    Missing or unreadable files produce the same structured ``TL0103``
+    report as every other loading path (never a raw ``OSError``).
+    """
+    from . import compiler as _compiler
+
     path = Path(path)
     try:
-        source = path.read_text(encoding="utf-8")
-    except OSError as exc:
+        source = _compiler.read_source_file(path)
+    except TensorLangError as exc:
         return {"ok": False, "path": str(path),
-                "error": error_report(exc), "suggestions": []}
+                "error": error_report(exc),
+                "suggestions": suggest_for(exc)}
     report = diagnose_source(source, filename=str(path))
     report["path"] = str(path)
     return report

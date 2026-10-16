@@ -55,7 +55,8 @@ def test_diagnose_unknown_wrt_param():
 def test_diagnose_missing_file(tmp_path):
     report = _diagnose.diagnose_file(tmp_path / "nope.tl")
     assert report["ok"] is False
-    assert report["error"]["category"] == "FileNotFoundError"
+    assert report["error"]["code"] == "TL0103"
+    assert report["path"] == str(tmp_path / "nope.tl")
 
 
 def test_cli_diagnose_human_and_json(tmp_path, capsys):

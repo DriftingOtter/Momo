@@ -97,7 +97,17 @@ def test_v02_sales_pipeline_example(tmp_path):
         .collect()
     )
     assert got.equals(expected)
-    assert pl.read_parquet(workdir / "data" / "revenue-demo.parquet").equals(got)
+    # File round-trip: grouped floating-point sums may differ in the
+    # last ulp by summation order (documented, not frozen —
+    # docs/COMPATIBILITY.md §4), so compare the persisted copy with
+    # tolerance here while the in-memory check above stays exact.
+    import numpy as _np
+
+    _back = pl.read_parquet(workdir / "data" / "revenue-demo.parquet")
+    assert _back.columns == got.columns
+    assert _back["region"].to_list() == got["region"].to_list()
+    assert _np.allclose(_back["net"].to_numpy(), got["net"].to_numpy(),
+                        rtol=1e-9, atol=1e-9)
     assert "polars-lazy" in ns["summary"].explain()
     assert ns["summary"].profile().lowered is True
 

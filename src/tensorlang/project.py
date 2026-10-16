@@ -46,7 +46,23 @@ class ProjectError(Exception):
 # -- discovery and manifest -----------------------------------------------------
 
 def find_root(start: str | Path) -> Path:
-    """Nearest ancestor directory holding a TensorLang project manifest."""
+    """Nearest ancestor directory holding a TensorLang project manifest.
+
+    Three outcomes are distinguished (M1 contract):
+
+    - a manifest is found and selects a project (returned);
+    - no candidate manifest exists (``ProjectError`` "no TensorLang project
+      found");
+    - the nearest manifest exists but is invalid (``ProjectError`` "invalid
+      manifest ...", naming the file and the TOML location).
+
+    An invalid manifest is never skipped in favor of an outer project:
+    when the nearest ``pyproject.toml`` cannot be parsed, or declares a
+    malformed ``[tool.tensorlang]`` table, discovery stops with an
+    actionable configuration diagnostic.  A ``pyproject.toml`` without any
+    ``[tool.tensorlang]`` table is not a TensorLang project and discovery
+    continues upward.
+    """
     current = Path(start).absolute()
     searched: list[str] = []
     while True:
@@ -54,10 +70,24 @@ def find_root(start: str | Path) -> Path:
         if manifest.is_file():
             try:
                 data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-            except (OSError, tomllib.TOMLDecodeError):
-                data = {}
+            except tomllib.TOMLDecodeError as exc:
+                raise ProjectError(
+                    f"invalid manifest {manifest}: {exc}",
+                    hint="fix the TOML syntax and retry; 'tl doctor' "
+                         "reports manifest problems without changing files")
+            except OSError as exc:
+                raise ProjectError(
+                    f"cannot read manifest {manifest}: {exc}",
+                    hint="check file permissions and retry")
             tools = data.get(TOOL_TABLE, {})
             if isinstance(tools, dict) and CONFIG_SECTION in tools:
+                section = tools[CONFIG_SECTION]
+                if not isinstance(section, dict):
+                    raise ProjectError(
+                        f"invalid manifest {manifest}: [tool.{CONFIG_SECTION}] "
+                        f"must be a table",
+                        hint="fix the section or run 'tl init' in a clean "
+                             "directory")
                 return current
         searched.append(str(current))
         parent = current.parent
@@ -91,10 +121,16 @@ def load_manifest(root: str | Path) -> dict:
         raise ProjectError(f"manifest {path} has no [project] table",
                            hint="see 'tl doctor' and docs/PROJECTS.md")
     for field in ("name", "version"):
-        if not project.get(field):
+        value = project.get(field)
+        if not value:
             raise ProjectError(
                 f"manifest {path} is missing [project] {field!r}",
                 hint="add the field; see docs/PROJECTS.md")
+        if not isinstance(value, str):
+            raise ProjectError(
+                f"manifest {path} has an invalid [project] {field!r}: "
+                f"expected a string, got {type(value).__name__}",
+                hint="fix the field type; see docs/PROJECTS.md")
     tools = data.get(TOOL_TABLE, {})
     section = tools.get(CONFIG_SECTION) if isinstance(tools, dict) else None
     if not isinstance(section, dict):
@@ -128,6 +164,30 @@ def find_uv() -> str:
     return uv
 
 
+_CREDENTIAL_RE = re.compile(r"(://)[^/\s]*:[^/\s]*@")
+
+
+def _redact_credentials(line: str) -> str:
+    """Hide ``user:password@`` embedded in URLs (do not leak secrets)."""
+    return _CREDENTIAL_RE.sub(r"\1***@", line)
+
+
+def summarize_uv_failure(args: list[str], proc) -> str:
+    """Build an actionable failure message from a completed uv process.
+
+    Preserves up to eight trailing non-empty stderr lines (falling back
+    to stdout) so resolution, lockfile, offline, and install failures
+    keep their diagnostic context instead of a single truncated line.
+    The caller reports ``proc.returncode`` unchanged.
+    """
+    text = (proc.stderr or "").strip() or (proc.stdout or "").strip()
+    lines = [_redact_credentials(line)
+             for line in text.splitlines() if line.strip()]
+    context = "\n".join(lines[-8:]) if lines else "no output captured"
+    return (f"uv {' '.join(args)} failed "
+            f"(exit {proc.returncode or 1}):\n{context}")
+
+
 def run_uv(args: list[str], root: Path, check: bool = True) -> subprocess.CompletedProcess:
     """Invoke uv with an argument array in the project directory."""
     uv = find_uv()
@@ -138,9 +198,7 @@ def run_uv(args: list[str], root: Path, check: bool = True) -> subprocess.Comple
         raise ProjectError(f"cannot execute uv: {exc}",
                            hint="check the uv installation")
     if check and proc.returncode != 0:
-        tail = (proc.stderr.strip() or proc.stdout.strip()).splitlines()
-        detail = tail[-1] if tail else f"exit {proc.returncode}"
-        raise ProjectError(f"uv {' '.join(args)} failed: {detail}",
+        raise ProjectError(summarize_uv_failure(args, proc),
                            hint="run with more context or check dependencies",
                            code=proc.returncode or 1)
     return proc
@@ -398,17 +456,59 @@ def _check_spec(spec: str) -> None:
     if not spec or not _PKG_RE.match(spec) or len(spec) > 200:
         raise ProjectError(
             f"invalid package specifier {spec!r}",
-            hint="examples: tl add numpy / tl add 'scipy>=1.14'")
+            hint="examples: tl add numpy / tl add 'scipy>=1.14' / "
+                 "tl add ./dist/pkg-0.1.0-py3-none-any.whl")
+
+
+def _resolve_local_wheel(spec: str, root: Path) -> str | None:
+    """Normalize a local-wheel dependency for ``uv add``.
+
+    Returns the spec to forward to uv, or ``None`` when ``spec`` is not a
+    local path.  Paths are resolved deterministically: specs inside the
+    project become project-relative (so the manifest stays relocatable
+    together with the wheel); specs elsewhere become absolute.  Callers
+    must pass the result through an argument array (never a shell).
+    """
+    if os.sep not in spec and "/" not in spec \
+            and not spec.lower().endswith(".whl"):
+        return None
+    candidate = Path(os.path.expanduser(spec))
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        resolved = candidate.absolute()
+    if not resolved.is_file():
+        raise ProjectError(
+            f"local artifact not found: {spec}",
+            hint="pass an existing .whl file, e.g. "
+                 "tl add ./dist/pkg-0.1.0-py3-none-any.whl")
+    if resolved.suffix.lower() != ".whl":
+        raise ProjectError(
+            f"unsupported local artifact {spec}: only .whl files are "
+            f"supported",
+            hint="build the library wheel first, then tl add the .whl path")
+    try:
+        return str(resolved.relative_to(root.resolve()))
+    except ValueError:
+        return str(resolved)
 
 
 def cmd_add(args: argparse.Namespace) -> int:
     root = find_root(Path.cwd())
+    forwarded: list[str] = []
     for spec in args.packages:
-        _check_spec(spec)
+        wheel = _resolve_local_wheel(spec, root)
+        if wheel is None:
+            _check_spec(spec)
+            forwarded.append(spec)
+        else:
+            forwarded.append(wheel)
     cmd = ["add"]
     if args.dev:
         cmd.append("--dev")
-    cmd.extend(args.packages)
+    cmd.extend(forwarded)
     run_uv(cmd, root)
     record_sync_state(root)
     print(f"added {', '.join(args.packages)}"
@@ -495,7 +595,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         root = find_root(Path.cwd())
         print(f"project: {root}")
     except ProjectError as exc:
-        print(f"project: MISSING ({exc})")
+        # Invalid/unreadable manifests are reported as INVALID, never as a
+        # missing project (M1: discovery distinguishes the two states).
+        text = str(exc)
+        if text.startswith("invalid manifest") \
+                or text.startswith("cannot read manifest"):
+            print(f"project: INVALID ({exc})")
+        else:
+            print(f"project: MISSING ({exc})")
         if exc.hint:
             print(f"  hint: {exc.hint}")
         return 1
@@ -591,7 +698,9 @@ def build_parser() -> argparse.ArgumentParser:
                            "development (recorded via [tool.uv.sources])")
 
     add = sub.add_parser("add", help="add dependencies via uv")
-    add.add_argument("packages", nargs="+", help="e.g. numpy 'scipy>=1.14'")
+    add.add_argument("packages", nargs="+",
+                     help="e.g. numpy 'scipy>=1.14' "
+                          "./dist/pkg-0.1.0-py3-none-any.whl")
     add.add_argument("--dev", action="store_true",
                      help="development dependency")
 

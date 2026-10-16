@@ -12,6 +12,7 @@ M4 reliability); `x99` in each range is the generic class fallback.
 |---|---|---|---|
 | `TL0101` | TLSyntaxError | invalid syntax | Check the reported line for TensorLang/Python syntax mistakes. |
 | `TL0102` | TLSyntaxError | malformed declaration | Do not call __tl_declare__ directly; write NAME := expr. |
+| `TL0103` | TLSyntaxError | missing or unreadable source file | Check the .tl path and retry; TensorLang never substitutes a similarly named file. |
 | `TL0199` | TLSyntaxError | unspecified syntax error | Generic syntax failure; see the message. |
 | `TL0201` | TLScopeError | duplicate declaration | A name may be declared once per scope; use = to reassign. |
 | `TL0202` | TLScopeError | declaration needs a plain name | := must introduce a plain name in the current scope. |

@@ -71,7 +71,10 @@ assert np.allclose(after, got)
 print("previous output intact after rejection")
 
 # 9. Numerical equivalence against the native backend.
-assert average == np.mean(ref**2 + ref)
+# Chunked tree reductions may differ in the last ulp by summation
+# order (documented, not frozen — see docs/COMPATIBILITY.md), so
+# compare with tolerance rather than bitwise equality.
+assert np.allclose(average, np.mean(ref**2 + ref), rtol=1e-12, atol=1e-12)
 
 print("native equivalence confirmed")
 

@@ -1,74 +1,101 @@
-# TensorLang public API and compatibility status (v0.9 M3)
+# TensorLang public API and compatibility status (v1.0 M1)
 
-Provisional contract inventory. No v1.0 guarantee is established;
-classifications reflect v0.9 M0–M3 evidence only.
+Intended v1.0 contract proposal. No v1.0 guarantee is active until the
+release is approved; categories below are the M1 stabilization
+proposal based on v0.9 M0–M1 evidence.
 
-Conventions used below — **A** candidate stable, **B** needs
-clarification, **C** needs correction, **D** experimental/internal.
+Stability categories — **Stable** (intended for compatibility
+guarantees beginning with v1.0), **Provisional** (public and usable,
+not in the full stable guarantee), **Experimental** (subject to
+change), **Internal** (no public promise).
 
-## Language core (A)
+Signatures verified against the implementation (`inspect.signature`,
+v1.0 M1 tree). Stable contracts cover names, signatures, return
+kinds, mutation/laziness, and diagnostic codes — never internal IR
+classes, backend plans, message wording, or filenames.
 
-- `:=` declarative vs `=` runtime assignment; `{X}` uid-scoped
-  parameters; operator definition, application (`f(data)`), and `>>`
-  composition; `.inplace()` explicit mutation with aliasing-by-identity
-  and rebinding-never-mutates; TL0305 fail-closed validation.
-- `T(...)` construction (scalars/sequences/mappings/arrays/frames);
-  rank-0 scalars collect to scalars.
-- Dense arithmetic/broadcasting (NumPy rules); `collect()` boundaries;
-  snapshot semantics; ownership (NumPy views, single copy at graph
-  boundary).
+## Stable (66 items: 65 functional names + `__version__` release metadata)
 
-## Data and math (A, with noted B items)
+Counting convention (locked): 65 functional stable names + 16
+provisional names + `__version__` (stable release metadata) = all 82
+exports. `test_public_api.py` enforces exactly this partition.
 
-- Scans, joins (explicit keys; order backend-defined), grouping,
-  `count` row/value semantics, `to_dense` policies
-  (`nulls="nan"|"error"`, `TL0418`), `is_null`/`not_null`,
-  `fill_null`/`drop_null`.
-- Same-domain `&`/`|` fusion; `TL0512` for unproven domains; `~`
-  order-preserving; dense positional logic (B: `==` of masks unfused
-  by design).
-- `sin/cos/tan/exp/log/sqrt`, reductions with `axis=`/`keepdims`
-  (`TL0511`), `solve`/`svd`/`eigh` (square/symmetric contracts),
-  `grad`/`value_and_grad`/`vjp` (first-order, fitted-affine rules).
-- `standardize`/`minmax`/`normalize`/`impute`/`pca` + `fit` returns-new
-  semantics; `TL0419` unfitted-application rejection; pipelines fit
-  in order without refitting.
+Language core: `:=` declarative vs `=` runtime assignment; `{X}`
+file-static checking, file-flat trust, root-based attribute rule,
+literal-receiver exemption, plain-value admission, open-by-identity
+declarative set, `x = f` aliasing (see `LANGUAGE_SPEC.md` §3);
+`TL0305` fail-closed validation.
 
-## Modules and sessions (A, B details)
+| name | signature | return / behavior | errors |
+|---|---|---|---|
+| `T` | `T(data=None, **fields)` | Tensor; copies at graph boundary | `TL0305`, `TL0418` |
+| `Tensor` | `Tensor(data=None)` | Tensor (materialized) | `TL04xx` |
+| `Lazy` | `Lazy(root, target=None)` | pending; `collect()` materializes + caches; `release()` drops | — |
+| `Operator` | `Operator(params, root, uid)` | reusable; `f(data)` applies; `>>` composes; immutable | `TL0417`, `TL0499`, `TL0503` |
+| `P` | `P(name) -> Operator` | single-param operator | — |
+| `sin/cos/tan/exp/log/sqrt` | `(x)` | Lazy elementwise; declarative over `{X}` | `TL07xx` |
+| `diff` | `diff(op)` | derivative operator (declarative) | `TL07xx` |
+| `integrate` | `integrate(op, lo=None, hi=None)` | definite integral value/operator | `TL07xx` |
+| `simplify` | `simplify(op)` | simplified operator | `TL07xx` |
+| `concat/stack` | `(parts, axis=0)` | Lazy shape op, pure | `TL05xx` |
+| `reshape` | `reshape(x, *shape)` | Lazy shape op, pure | `TL05xx` |
+| `flatten/transpose` | `(x)` | Lazy shape op, pure | `TL05xx` |
+| `logical_and/or` | `(a, b)` | Lazy Boolean; same-domain fusion, else `TL0512` | `TL0512` |
+| `logical_not` | `(a)` | Lazy Boolean; order-preserving | — |
+| `join` | `join(left, right, on=None, how='inner', suffix='_right')` | pure; explicit keys; order backend-defined (no order promise) | `TL0430/431/0510` |
+| `sort` | `sort(x, by=None, descending=False)` | pure; deterministic given key | — |
+| `where` | `where(cond, a, b)` | Lazy branch, pure | `TL0504/0505` |
+| `clip` | `clip(x, lo=None, hi=None)` | Lazy clamp, pure | — |
+| `standardize/minmax/normalize/impute/pca` | factories (see signatures) | fittable; `fit` returns new, never mutates | `TL0410-416`, `TL0419` |
+| `FittableOperator` | `(kind, config, state=None, uid=None)` | unfitted until `fit`; apply-before-fit → `TL0419` | `TL0419` |
+| `PipelineOperator` | `(stages, uid=None)` | ordered stages; fit in order | `TL0419` |
+| `grad/value_and_grad/vjp` | `(loss, wrt=None)` | first-order only; VJP seeds; no 2nd-order/chunked | `TL0801-809` |
+| `svd` | `svd(x, full_matrices=True)` | `SVDResult`-shaped values | `TL0506/0507` |
+| `eigh` | `eigh(x)` | symmetric eigendecomposition | `TL0506/0507` |
+| `solve` | `solve(a, b)` | linear solve | `TL0506/0507` |
+| `norm` | `norm(x, ord=None, axis=None)` | scalar/vector norm | — |
+| `cov/corr` | `(x, rowvar=None)` | reductions, pure | `TL0511` |
+| `quantile` | `quantile(x, q=0.5)` | reduction, pure | `TL0511` |
+| `is_null/not_null` | `(x)` | null predicates (NaN rules per `docs/COMPARISONS.md`) | — |
+| `fill_null/drop_null` | `(x, value)` / `(x)` | explicit missing handling, pure | — |
+| `run_source` | `(source, filename='<tl>', extra=None)` | isolated namespace dict; `extra=` entry-only, `=` keeps module precedence, `:=` over injected → `TL0203` | `TL01xx-03xx`, `TL0310-315` |
+| `run_file` | `(path)` | as `run_source`; missing/unreadable → `TL0103` | `TL0103` |
+| `check_source` | `(source, filename='<tl>')` | `ast.Module`, pure; `trusted_names=`/`injected_names=` deprecated (warn, still honored) | `TL01xx-03xx` |
+| `diagnose_source/file` | `(source, filename)` / `(path)` | report dict (`ok`/`error.code`/`suggestions`/`names`/`path`) | coded reports |
+| `set/clear/current_policy` | keyword-only policy dict | process-global explicit policy mutation | `TL10xx` |
+| 10 error classes | `(message, loc=None, code=None, details=None)` | `ClassName[CODE]: loc: message`; codes stable, wording not | registry |
+| `__version__` | `str` | release version (`0.9.0`) | — |
 
-- Sibling/dotted/alias imports; file-relative resolution;
-  Python-first precedence; inert namespace parents; isolated
-  namespaces; per-session `(path, name)` cache identity;
-  `TL0310`–`TL0315` diagnostics with chains; `TL0315` thread guard.
-- B: REPL session retention across `:reset` boundaries is by design
-  but subtle; `extra=` `=`-override is silent-but-documented.
+## Provisional (16)
 
-## Project workflow (A-minus: new in v0.9, stable by test)
+Public and tested, but contract details remain open: `equal`,
+`not_equal` (dense-vs-structured NaN total-order divergence);
+`unique` (order semantics); `over`, `rolling` (window/grouped edge
+semantics); `einsum`, `tensordot`, `moveaxis` (advanced algebra);
+`onehot`, `polynomial` (expansion conventions); `GradOperator`,
+`ValueGradOperator`, `VjpOperator`, `ValueGradResult`, `SVDResult`,
+`EighResult` (result/operator carrier types — fields not frozen).
 
-- `tl new/init/add/remove/sync/run/check/test/doctor`; manifest
-  discovery (nearest `pyproject.toml` with `[tool.tensorlang]`);
-  `[project]` single dependency truth; `uv.lock` reproducibility
-  record; freshness states (`fresh`/`stale:*`/`no-state`/
-  `no-environment`); `tl sync --locked` strict path; argv forwarding
-  (`sys.argv[3:]` are app args); exit-status propagation.
+## Experimental / Internal (no public promise)
 
-## C resolved in v0.9
+`tl build`/`publish` (nonexistent by design); chunked-AD/diff
+deferrals; REPL history; benchmark harness; `trusted_names=`
+plumbing (deprecated, warns).
 
-F-B4 (mask fusion/`TL0512`), F-A2 (canonical identity + cleanup),
-unfitted timing (`TL0419`).
+## Remaining B/C risks (must clear before any freeze)
 
-## D experimental/internal
+Aggregate column naming; grouped-float last-ulp order noise (~1e-12,
+tolerance-documented not frozen); `==`-of-masks unfused by design;
+method-named-field indexing `TypeError`; REPL `:reset` retention
+subtlety; `extra=` `=`-override silent-but-documented;
+`to_dense` default null policy; intercept-penalty convention.
+C items (F-B4/`TL0512`, F-A2 identity, `TL0419` timing) are resolved;
+risk is regression only.
 
-`trusted_names`/`injected_names` plumbing, chunked-AD/diff deferrals,
-REPL history, benchmark harness internals, `tl build`/`publish`
-(non-existent by design).
+## Policy
 
-## Pre-1.0 policy direction
-
-Additive changes free; correctness fixes ship with codes + migration
-notes; diagnostic codes stable once documented (no renumbering without
-cause); Python support follows the CI matrix (3.12–3.14); dependency
-floors pinned per release; manifest evolution additive-only;
-persistent-data formats validated by round-trip tests before any
-change. v1.0 contract requires an independent-application evidence
-round (v0.9 M0-style) against the frozen API.
+Intended v1.0 policy lives in `docs/COMPATIBILITY.md` (proposed,
+pending release validation). Additive exports allowed in minor;
+behavioral corrections ship with code + migration note; codes never
+renumbered without a major + alias note; Python floor follows the CI
+matrix (3.12–3.14).
