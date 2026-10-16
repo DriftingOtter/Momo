@@ -17,6 +17,9 @@ def main(argv: list[str] | None = None) -> int:
 
     run = sub.add_parser("run", help="execute a .tl source file")
     run.add_argument("file", help="path to a .tl source file")
+    run.add_argument("app_args", nargs=argparse.REMAINDER,
+                     help="optional arguments forwarded to the program "
+                          "(visible via sys.argv; ignored by the runner)")
 
     check = sub.add_parser("check", help="parse and validate a .tl file")
     check.add_argument("file", help="path to a .tl source file")

@@ -448,3 +448,17 @@ def test_nested_cycle_detected_prescan(proj):
         run_file(str(main))
     assert exc_info.value.code == "TL0312"
     assert "nest" in str(exc_info.value)
+
+
+def test_dual_spelling_same_file_independent(proj):
+    # Same file via bare and dotted spellings initializes independent
+    # modules (CPython semantics); both are fully functional.
+    (proj / "sub").mkdir(exist_ok=True)
+    write(proj, "sub/leaf.tl", "v := 41\n")
+    write(proj, "sub/user.tl", "from leaf import v\n")
+    main = write(proj, "main.tl",
+                 "from sub.user import v as w\n"
+                 "from sub.leaf import v\n")
+    ns = run_file(str(main))
+    assert ns["v"] == 41
+    assert ns["w"] == 41

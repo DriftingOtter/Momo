@@ -70,3 +70,33 @@ jobs:
           pip install -e ".[dev]"
       - name: Full benchmark suite (small+medium)
         run: python benchmarks/run_all.py --sizes small medium
+
+  project:
+    # Project-manager integration: real uv execution (network required).
+    # Skipped tl tests must be reported, never silent.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install package with dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Project integration suite (uv-backed)
+        run: python -m pytest tests/test_tl.py -q -rs
+      - name: Managed project end-to-end
+        run: |
+          export PATH="$PWD/.venv/bin:$PATH"
+          rm -rf /tmp/tlci && mkdir -p /tmp/tlci && cd /tmp/tlci
+          tl new ciapp --tensorlang "$GITHUB_WORKSPACE"
+          cd ciapp
+          tl sync
+          tl run
+          tl add --dev pytest
+          tl sync
+          tl test
+          tl check
+          tl doctor

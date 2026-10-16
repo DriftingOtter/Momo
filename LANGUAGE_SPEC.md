@@ -197,6 +197,12 @@ The same operator has the same logical meaning across representations:
 - Field comparisons yield per-record Boolean masks; `t[mask]` filters rows.
   Whole-frame comparisons yield Boolean frames, which **must not** be
   silently merged into record conditions.
+- Boolean combination (`&`, `|`) over one logical row domain fuses into
+  a single relational query (deterministic, order-independent);
+  masks from provably different row domains are rejected (`TL0512`) —
+  equal length is not proof of equal row identity. `~` preserves order.
+  Separately materialized results have no proven correspondence: filter
+  sequentially or derive predicates from one source.
 - Joins require explicit keys (`cross` excepted); row order without an
   explicit `sort` is backend-defined.
 - Reductions preserve labels (one-row frames); `by=` groups explicitly.
@@ -427,8 +433,10 @@ packages; relative imports are rejected (`TL0314`).
 
 Every module compiles through the existing frontend (same scope and
 M1 effect validation), executes in an isolated namespace, and is
-cached per loader session: repeated imports reuse initialized modules
-and operator identities, while independent executions stay isolated.
+cached per loader session: the same file requested twice under one
+spelling reuses its initialized module and operator identities, while
+different spellings initialize independently (as in CPython);
+independent executions stay isolated.
 Circular imports are rejected (`TL0312`) by static pre-scan before
 execution; missing modules/symbols report chains (`TL0310`/`TL0311`);
 initialization failures chain their cause (`TL0313`).

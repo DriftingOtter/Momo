@@ -43,6 +43,7 @@ M4 reliability); `x99` in each range is the generic class fallback.
 | `TL0416` | TLTypeError | operator is not fittable | Only standardize()/minmax()/normalize()/impute()/pca() (and >> pipelines) support .fit(). |
 | `TL0417` | TLTypeError | invalid operator composition | Both sides of >> must be operators; the right side must be unary. |
 | `TL0418` | TLTypeError | unsupported structured-to-dense bridge | Select existing numeric columns with to_dense(columns=[...]); use nulls='error' to forbid missing values, or fit() numerical data directly. |
+| `TL0419` | TLTypeError | unfitted estimator application | Fit the estimator first and apply the fitted result; unfitted application is rejected when applied, not at collection. |
 | `TL0420` | TLTypeError | gradient constructor needs an operator | Pass an Operator to grad()/value_and_grad()/vjp(), not data. |
 | `TL0430` | TLTypeError | invalid join configuration | Use a documented join type; non-cross joins need explicit on= keys. |
 | `TL0431` | TLTypeError | join key or shape problem | Keys must exist on both sides with compatible lengths. |
@@ -58,6 +59,7 @@ M4 reliability); `x99` in each range is the generic class fallback.
 | `TL0509` | TLShapeError | feature width mismatch on apply | Application data must have the fitted feature count (frames align by name). |
 | `TL0510` | TLShapeError | join execution failed | Check key dtypes and join compatibility. |
 | `TL0511` | TLShapeError | invalid reduction axis | Use axis=None, an in-range axis, or a tuple of in-range axes; keepdims must be bool. |
+| `TL0512` | TLShapeError | incompatible mask row domains | Boolean results from different row domains cannot be combined positionally; filter sequentially or derive both predicates from one source. |
 | `TL0599` | TLShapeError | unspecified shape error | Generic shape failure; see the message. |
 | `TL0601` | TLMutationError | inplace without a mutable target | Use f(tensor).inplace() with a single-input operator over a Tensor. |
 | `TL0602` | TLMutationError | inplace into a lazy scan | Scans are immutable descriptors; collect() into a tensor first. |

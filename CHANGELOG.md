@@ -1,6 +1,19 @@
 # TensorLang changelog
 
-## v0.8.0 (unreleased) — modular applications
+## v0.9.0
+
+- Structured mask composition fused per row domain; incompatible
+  domains rejected (`TL0512`).
+- Canonical per-spelling module identity; failure cleanup without
+  cross-session poisoning.
+- Unfitted-estimator application rejected at application time
+  (`TL0419`).
+- `tl` project manager (uv-backed): `new`/`init`/`add`/`remove`/
+  `sync`/`run`/`check`/`test`/`doctor`; `pyproject.toml` manifest
+  with `[tool.tensorlang]` entry; additive `tensorlang run` argument
+  forwarding.
+
+## v0.8.0 — modular applications
 
 - Native file-based `.tl` imports (`import m`, `from m import x`,
   aliases, dotted paths): resolved relative to the importing file,

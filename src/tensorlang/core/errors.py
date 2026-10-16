@@ -178,6 +178,9 @@ _reg("TL0418", "TLTypeError", "unsupported structured-to-dense bridge",
      "Select existing numeric columns with to_dense(columns=[...]); "
      "use nulls='error' to forbid missing values, or fit() numerical "
      "data directly.")
+_reg("TL0419", "TLTypeError", "unfitted estimator application",
+     "Fit the estimator first and apply the fitted result; unfitted "
+     "application is rejected when applied, not at collection.")
 _reg("TL0420", "TLTypeError", "gradient constructor needs an operator",
      "Pass an Operator to grad()/value_and_grad()/vjp(), not data.")
 _reg("TL0430", "TLTypeError", "invalid join configuration",
@@ -207,6 +210,10 @@ _reg("TL0510", "TLShapeError", "join execution failed",
 _reg("TL0511", "TLShapeError", "invalid reduction axis",
      "Use axis=None, an in-range axis, or a tuple of in-range axes; "
      "keepdims must be bool.")
+_reg("TL0512", "TLShapeError", "incompatible mask row domains",
+     "Boolean results from different row domains cannot be combined "
+     "positionally; filter sequentially or derive both predicates from "
+     "one source.")
 _reg("TL0601", "TLMutationError", "inplace without a mutable target",
      "Use f(tensor).inplace() with a single-input operator over a Tensor.")
 _reg("TL0602", "TLMutationError", "inplace into a lazy scan",
