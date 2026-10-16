@@ -1,9 +1,8 @@
-# TensorLang compatibility and deprecation policy (v1.0 proposal)
+# TensorLang compatibility and deprecation policy (v1.0)
 
-**Status: proposed (M4-finalized wording).** This policy is the
-intended v1.0 contract. It is not active until the v1.0 release is
-approved and tagged. Pre-1.0 releases (including v0.9.0) carry no
-long-term guarantee beyond the migration notes in
+**Status: active as of `v1.0.0`.** This policy is the binding v1.0
+contract. Pre-1.0 releases (including v0.9.0) carry no long-term
+guarantee beyond the migration notes in
 `evaluation/v1/M0_COMPATIBILITY.md`.
 
 ## 1. Semantic versioning
@@ -99,5 +98,5 @@ fallback); authenticated package URLs are redacted in diagnostics.
 
 ## 8. Activation
 
-This policy takes effect at the v1.0.0 tag. Until then it is a
-review draft guiding M1–M4 stabilization work.
+This policy is in effect since the `v1.0.0` tag. It remains a review
+draft for any work predating that tag.

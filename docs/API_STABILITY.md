@@ -1,11 +1,11 @@
-# TensorLang public API and compatibility status (v1.0 M1)
+# TensorLang public API and compatibility status (v1.0)
 
-Intended v1.0 contract proposal. No v1.0 guarantee is active until the
-release is approved; categories below are the M1 stabilization
-proposal based on v0.9 M0–M1 evidence.
+Active v1.0 contract as of the tagged `v1.0.0` release.
+Categories below are the M1 stabilization proposal, verified through
+M4 evidence.
 
-Stability categories — **Stable** (intended for compatibility
-guarantees beginning with v1.0), **Provisional** (public and usable,
+Stability categories — **Stable** (covered by the compatibility
+guarantee beginning with v1.0.0), **Provisional** (public and usable,
 not in the full stable guarantee), **Experimental** (subject to
 change), **Internal** (no public promise).
 
